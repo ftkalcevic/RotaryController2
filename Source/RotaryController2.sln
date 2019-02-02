@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.168
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RotaryController2", "RotaryController2\RotaryController2.vcxproj", "{380F997F-5F41-487D-9630-5B5B89FD70D3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|VisualGDB = Debug|VisualGDB
+		Release|VisualGDB = Release|VisualGDB
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Debug|VisualGDB.ActiveCfg = Debug|VisualGDB
+		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Debug|VisualGDB.Build.0 = Debug|VisualGDB
+		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Release|VisualGDB.ActiveCfg = Release|VisualGDB
+		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Release|VisualGDB.Build.0 = Release|VisualGDB
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8C2898E1-FEEC-42CA-96AF-D0DE2553FFC6}
+	EndGlobalSection
+EndGlobal
