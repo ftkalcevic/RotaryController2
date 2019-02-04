@@ -6,6 +6,7 @@
 #include "rotarycontroller.h"
 //#include "display_vfd_M0420SD.h"
 #include "display_oled_NHD_US2066.h"
+#include "eeprom_spi_25lc640.h"
 #include "display.h"
 #include "keys.h"
 #include "buzzer.h"
@@ -16,6 +17,7 @@ static Display<4,20> display(&displayDevice);
 static Keys keys;
 static Buzzer buzzer;
 static Motion motion(&htim3);
+static EepromSPI25lc640 eepromDevice;
 static uint8_t activeDevice;
 
 #define MAX_DEVICES		2
@@ -74,17 +76,25 @@ struct Eeprom
 static_assert(((sizeof(Eeprom::Config) / 4) * 4) == sizeof(Eeprom::Config), "eeprom not multiple of 4 bytes");
 static Eeprom eeprom;
 
-
-
-static void ReadEeprom()
+void RotaryController::WriteEEPROM()
 {
-	// read eeprom
+	// calculate crc
+	eeprom.crc = HAL_CRC_Calculate(&hcrc, (uint32_t*)&(eeprom.Config), sizeof(eeprom.Config)/4 );
+
+	eepromDevice.WriteEeprom(0, (uint8_t*)&(eeprom), sizeof(eeprom));
+}
+
+void RotaryController::ReadEEPROM()
+{
+	eepromDevice.ReadEeprom(0, (uint8_t*)&(eeprom), sizeof(eeprom));
+	
 	// check crc
 	uint32_t crc = HAL_CRC_Calculate(&hcrc, (uint32_t*)&(eeprom.Config), sizeof(eeprom.Config)/4 );
 
 	// if crc fails, use defaults
 	if(crc != eeprom.crc)	
 	{
+		eepromHasBeenReset = true;
 		memset(&eeprom, 0, sizeof(eeprom));
 		eeprom.Config.SelectedDevice = 0;
 		eeprom.Config.DeviceConfig[0].MotorStepsPerRevolution = 200*10;			// steps per motor revolution (200*10 for gecko)
@@ -120,26 +130,21 @@ static void ReadEeprom()
 		eeprom.Config.DeviceConfig[1].DivisionsUnits = Units::Steps;			// step or degrees
 		eeprom.Config.DeviceConfig[1].LastUnits = Units::Steps;					// degrees, steps
 		eeprom.Config.DeviceConfig[1].ContinuousSpeed = 500;					// last continuous speed
+		
+		WriteEEPROM();
 	}
 }
 
-static void WriteEeprom()
-{
-	// calculate crc
-	eeprom.crc = HAL_CRC_Calculate(&hcrc, (uint32_t*)&(eeprom.Config), sizeof(eeprom.Config)/4 );
-	// write eeprom
-}
-
-
 RotaryController::RotaryController()
 {
+	eepromHasBeenReset = false;
 }
 
 void RotaryController::Init()
 {
 	activeDevice = eeprom.Config.SelectedDevice;
 		
-	ReadEeprom();
+	ReadEEPROM();
 	
 	motion.SetMotorConfig(eeprom.Config.DeviceConfig[activeDevice].Backlash,
 						  eeprom.Config.DeviceConfig[activeDevice].MotorStepsPerRevolution,
@@ -191,6 +196,8 @@ void RotaryController::DoSplash()
 	//                12345678901234567890
 	display.Text(0,0," Rotary Controller ");
 	display.Text(0,1,"    Version 1.0");
+	if ( eepromHasBeenReset )
+		display.Text(0,2,"Warning EEPROM Reset");
 	display.Update();
 	
 	for (;;)
@@ -211,7 +218,7 @@ void RotaryController::DoSetup()
 	for (;;)
 	{
 		uint32_t key = keys.ScanKeys();
-		if (key == Keys::KEY_MODE)
+		if (key == (Keys::KEY_MODE | Keys::KEY_PRESSED))
 			break;		
 	}
 }
@@ -227,7 +234,7 @@ void RotaryController::DoJog()
 	for (;;)
 	{
 		uint32_t key = keys.ScanKeys();
-		if (key == Keys::KEY_MODE)
+		if (key == (Keys::KEY_MODE | Keys::KEY_PRESSED))
 			break;		
 	}
 }

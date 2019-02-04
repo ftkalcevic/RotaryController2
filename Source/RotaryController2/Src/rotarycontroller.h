@@ -2,6 +2,10 @@
 
 class RotaryController
 {
+	void WriteEEPROM();
+	void ReadEEPROM();
+	bool eepromHasBeenReset;
+	
 public:
 	enum EBacklight
 	{

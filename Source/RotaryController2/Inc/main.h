@@ -66,7 +66,8 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
-
+extern void SetDisplaySPI();
+extern void SetEEPROMSPI();
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/

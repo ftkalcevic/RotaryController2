@@ -169,14 +169,14 @@ public:
 		else if(autoRepeatCounter)
 		{
 			if (pressed & keystate)	// still down
+			{
+				autoRepeatCounter--;
+				if (autoRepeatCounter == 0)
 				{
-					autoRepeatCounter--;
-					if (autoRepeatCounter == 0)
-					{
-						ret = pressed | KEY_PRESSED;
-						autoRepeatCounter = SUBSEQUENT_KEY_TIMEOUT;
-					}
+					ret = pressed | KEY_PRESSED;
+					autoRepeatCounter = SUBSEQUENT_KEY_TIMEOUT;
 				}
+			}
 			else
 			{
 				ret = pressed | KEY_RELEASED;

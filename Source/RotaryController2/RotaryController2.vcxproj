@@ -96,6 +96,7 @@
     <ClCompile Include="Drivers\STM32F1xx_HAL_Driver\Src\stm32f1xx_hal_flash_ex.c" />
     <ClCompile Include="Drivers\STM32F1xx_HAL_Driver\Src\stm32f1xx_hal_gpio.c" />
     <ClInclude Include="Src\common.h" />
+    <ClInclude Include="Src\display_oled_NHD_US2066.h" />
     <ClInclude Include="Src\display_vfd_M0420SD.h" />
     <ClInclude Include="Src\dwt_stm32_delay.h" />
     <ClInclude Include="Src\keys.h" />

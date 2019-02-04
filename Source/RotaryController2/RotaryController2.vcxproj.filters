@@ -257,5 +257,8 @@
     <ClInclude Include="Src\dwt_stm32_delay.h">
       <Filter>Header files</Filter>
     </ClInclude>
+    <ClInclude Include="Src\display_oled_NHD_US2066.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

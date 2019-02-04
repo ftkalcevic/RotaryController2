@@ -499,10 +499,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIO_RUNBUTTON_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : GPIO_BUZZER_Pin GPIO_BACKLIGHT_IN1_Pin GPIO_BACKLIGHT_IN2_Pin GPIO_EEPROM_CS_Pin 
-                           GPIO_STEPPER_ENABLE_Pin GPIO_STEPPER_DIR_Pin */
-  GPIO_InitStruct.Pin = GPIO_BUZZER_Pin|GPIO_BACKLIGHT_IN1_Pin|GPIO_BACKLIGHT_IN2_Pin|GPIO_EEPROM_CS_Pin 
-                          |GPIO_STEPPER_ENABLE_Pin|GPIO_STEPPER_DIR_Pin;
+  /*Configure GPIO pins : GPIO_BUZZER_Pin GPIO_BACKLIGHT_IN1_Pin GPIO_BACKLIGHT_IN2_Pin GPIO_STEPPER_ENABLE_Pin 
+                           GPIO_STEPPER_DIR_Pin */
+  GPIO_InitStruct.Pin = GPIO_BUZZER_Pin|GPIO_BACKLIGHT_IN1_Pin|GPIO_BACKLIGHT_IN2_Pin|GPIO_STEPPER_ENABLE_Pin 
+                          |GPIO_STEPPER_DIR_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -516,22 +516,47 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : GPIO_EEPROM_CS_Pin GPIO_STEPPER_STEP_Pin */
+  GPIO_InitStruct.Pin = GPIO_EEPROM_CS_Pin|GPIO_STEPPER_STEP_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
   /*Configure GPIO pins : GPIO_KEYPAD_4_Pin GPIO_KEYPAD_3_Pin GPIO_KEYPAD_2_Pin GPIO_KEYPAD_1_Pin */
   GPIO_InitStruct.Pin = GPIO_KEYPAD_4_Pin|GPIO_KEYPAD_3_Pin|GPIO_KEYPAD_2_Pin|GPIO_KEYPAD_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : GPIO_STEPPER_STEP_Pin */
-  GPIO_InitStruct.Pin = GPIO_STEPPER_STEP_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
-  HAL_GPIO_Init(GPIO_STEPPER_STEP_GPIO_Port, &GPIO_InitStruct);
-
 }
 
 /* USER CODE BEGIN 4 */
+void SetDisplaySPI()
+{
+	MX_SPI1_Init();
+}
+
+
+// EEPROM SPI settings are different to the display - clk polarity, clock edge, MSB first, slower clock (max 2MHz)
+void SetEEPROMSPI()
+{
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }	
+}
 
 /* USER CODE END 4 */
 
