@@ -3,6 +3,7 @@
 #include "main.h"
 #include "dwt_stm32_delay.h"
 
+
 class Motion
 {
 public:
@@ -30,9 +31,9 @@ private:
 	bool bPositiveMove;
 	volatile int32_t nMotorPosition;
 	bool bPendingDestination;
-	uint32_t nPendingDestination;
-	uint32_t nPendingMoveDistance;
-	uint32_t nMotorDestination;
+	int32_t nPendingDestination;
+	int32_t nPendingMoveDistance;
+	int32_t nMotorDestination;
 	TIM_HandleTypeDef *htim;
 
 	// Config items
@@ -253,7 +254,7 @@ public:
 					{
 						long nDiff = nPendingDestination - nMotorPosition;
 						long nAbsDiff = nDiff < 0 ? -nDiff : nDiff;
-						if (nAbsDiff - 4 * nBacklash < (long)nTicksPerRotation / 2)		// find the shortest route, CW or CCW
+						if (nAbsDiff < 4*nBacklash || nAbsDiff - 4 * nBacklash < (long)nTicksPerRotation / 2)		// find the shortest route, CW or CCW
 						{
 							if (nDiff < 0)
 								bMotorClockwise = false;
@@ -317,7 +318,11 @@ public:
 					nPendingMoveDistance = 0;
 					bPendingDestination = false;
 
-					if (nDistance == 1)
+					if (nDistance == 0)
+					{
+						return;
+					}
+					else if (nDistance == 1)
 					{
 						// fudge.
 
@@ -347,24 +352,24 @@ public:
 					// Precompute the path
 					nPathAcceleration = nAcceleration;
 					int nMaxAccelerationTime = nMaxVelocity / nPathAcceleration;
-					long nMaxAccelerationDistance = (long)nPathAcceleration * (long)nMaxAccelerationTime * (long)nMaxAccelerationTime / 2;
+					long nMaxAccelerationDistanceX2 = (long)nPathAcceleration * (long)nMaxAccelerationTime * (long)nMaxAccelerationTime;
 
 					nRunTimeFraction = 0;
 					nAccTime = 0;
 					nRunTime = 0;
 					nDecTime = 0;
 
-					if (nDistance > 2 * nMaxAccelerationDistance)	// *2 for acc + dec
+					if (nDistance > 2 * nMaxAccelerationDistanceX2)	// *2 for acc + dec
 					{
 						// Accelerate to max, run, then decelerate.
 						// We fiddle with the run time to get the correct distance.
 						nAccTime = nMaxAccelerationTime;
 						int nPeakVelocity = nAccTime * nPathAcceleration;
-						nRunTime = (nDistance - 2 * nMaxAccelerationDistance) / nPeakVelocity;
+						nRunTime = (nDistance - nMaxAccelerationDistanceX2) / nPeakVelocity;
 						nDecTime = nMaxAccelerationTime;
 
 						// Calculate the run time fraction - extra steps of const vel required to complete the trip
-						nRunTimeFraction = (nDistance - 2 * nMaxAccelerationDistance) % nPeakVelocity;
+						nRunTimeFraction = (nDistance - nMaxAccelerationDistanceX2) % nPeakVelocity;
 						if (nRunTimeFraction != 0)
 							nRunTime++;
 					}
@@ -379,13 +384,13 @@ public:
 						}
 						//nAccTime = isqrt32((2 * (nDistance / 2) / nPathAcceleration));
 						nAccTime = isqrt32(nDistance / nPathAcceleration);
-						int32_t nAccelerationDistance = nPathAcceleration * nAccTime * nAccTime / 2;
+						int32_t nAccelerationDistanceX2 = nPathAcceleration * nAccTime * nAccTime;
 						int32_t nPeakVelocity = nAccTime * nPathAcceleration;
-						nRunTime = (nDistance - 2 * nAccelerationDistance) / nPeakVelocity;
+						nRunTime = (nDistance - nAccelerationDistanceX2) / nPeakVelocity;
 						nDecTime = nAccTime;
 
 						// Calculate the run time fraction.
-						nRunTimeFraction = (nDistance - 2 * nAccelerationDistance) % nPeakVelocity;
+						nRunTimeFraction = (nDistance - nAccelerationDistanceX2) % nPeakVelocity;
 						if (nRunTimeFraction != 0)
 							nRunTime++;
 					}
@@ -403,8 +408,39 @@ public:
 		}
 	}
 
+	int32_t MotorPosition()
+	{
+		__disable_irq();
+		uint32_t n = nMotorPosition;
+		__enable_irq();
+		return n;
+	}
 
+	int32_t MotorDesitination()
+	{
+		return nMotorDestination;
+	}
 
+	void MotorStop()
+	{
+		if (eState != Motion::eStopped)
+		{
+			if (eState == Motion::eDecelerating)
+			{
+				// already stopping.
+			}
+			else
+			{
+				__disable_irq();
+				eState = Motion::eDecelerating;
+				nDecTime = nVelocity / nAcceleration;
+				if (nDecTime == 0)
+					nDecTime = 1;
+				__enable_irq();
+			}
+		}
+	}
+	
 private:
 	void SetMotorStep(bool state)
 	{
@@ -520,8 +556,9 @@ private:
 			nDegrees += 360000;
 
 		// Convert absolute position in degrees to absolute position in steps.
-		unsigned long long n = nDegrees * nTicksPerRotation;
-		unsigned long nSteps = n / 360000UL;
+		unsigned long long nSteps = nDegrees;
+		nSteps *= nTicksPerRotation;
+		nSteps /= 360000UL;
 
 		return nSteps;
 	}

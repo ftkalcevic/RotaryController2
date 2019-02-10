@@ -44,6 +44,8 @@ class DisplayOLEDNHDUS2066
 	
 	void SendCMD(uint8_t cmd)
 	{
+		WaitForDMAToComplete();
+		
 		uint8_t data[3];
 		data[0] = START | WRITE | REGISTER;
 		data[1] = cmd & 0x0F;
@@ -84,6 +86,12 @@ class DisplayOLEDNHDUS2066
 		while (hspi1.State != HAL_SPI_STATE_READY)
 			continue;
 		HAL_GPIO_WritePin(GPIO_DISPLAY_CS_GPIO_Port, GPIO_DISPLAY_CS_Pin, GPIO_PIN_SET);
+	}
+	
+	void WaitForDMAToComplete()
+	{
+		while (hspi1.State != HAL_SPI_STATE_READY)
+			continue;
 	}
 	
 public:
@@ -223,10 +231,12 @@ public:
 		SendText(s, strlen(s));
 	}
 
-	void DisplayBuffer(char *mem, uint8_t len)
+	bool DisplayBuffer(char *mem, uint8_t len, bool block = true)
 	{
-		while (hspi1.State != HAL_SPI_STATE_READY)
-			continue;
+		if (!block && hspi1.State != HAL_SPI_STATE_READY)
+			return false;
+
+		WaitForDMAToComplete();
 		
 		uint8_t cmd = (CMD_SETDDRAM_ADDR | (0 & 0b01111111));
 		mem[0] = START | WRITE | REGISTER;
@@ -236,6 +246,7 @@ public:
 		
 		HAL_GPIO_WritePin(GPIO_DISPLAY_CS_GPIO_Port, GPIO_DISPLAY_CS_Pin, GPIO_PIN_RESET);
 		HAL_SPI_Transmit_DMA(&hspi1, (uint8_t*)mem, len);
+		return true;
 	}
 	
 	void TxCpltCallback()
