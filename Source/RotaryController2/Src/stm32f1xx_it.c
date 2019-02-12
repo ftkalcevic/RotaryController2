@@ -75,6 +75,7 @@ extern DMA_HandleTypeDef hdma_spi1_tx;
 extern SPI_HandleTypeDef hspi1;
 extern TIM_HandleTypeDef htim3;
 /* USER CODE BEGIN EV */
+extern void motion_MSInterrupt();
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -198,7 +199,7 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-
+  motion_MSInterrupt();
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */

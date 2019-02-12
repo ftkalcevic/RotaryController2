@@ -77,6 +77,7 @@ void Error_Handler(void);
 extern CRC_HandleTypeDef hcrc;
 extern SPI_HandleTypeDef hspi1;
 extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim2;
 
 /* USER CODE END EFP */
 

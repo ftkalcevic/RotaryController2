@@ -39,6 +39,8 @@ class RotaryController
 	bool bMotorReverseDirection;
 	Units movementUnits;
 	int32_t division, divisions;
+	bool isSlowSpeed;
+	int32_t continuousSpeed;
 	
 public:
 	enum EBacklight
@@ -63,8 +65,16 @@ public:
 	void DoJog();
 	void DoSetup();
 	void DoDivisions();
-	
+	void DoContinuous();
+	void DoSynchronised();
+	void DoSegment();
+		
+	bool DrawSegment(bool block);
+	bool DrawSynchronised(bool block);
+	void DoGoto(uint8_t row);
 	bool DrawDivisions(bool block);
+	bool DrawContinous(bool block);
+	void ShowRotateSpeed();
 		
 	bool DrawJog(bool block=true);
 	void Jog(int32_t distance);

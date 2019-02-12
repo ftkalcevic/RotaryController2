@@ -24,6 +24,7 @@ private:
 	uint32_t nRunTime;
 	uint32_t nDecTime;
 	bool bContinuousMode;
+	bool bSynchronousMotion;
 	uint32_t nVelocityTimer;	
 	uint32_t nVelocityCounter;
 	uint8_t interrupt_tick;
@@ -35,7 +36,11 @@ private:
 	int32_t nPendingMoveDistance;
 	int32_t nMotorDestination;
 	TIM_HandleTypeDef *htim;
-
+	uint32_t targetContinuousSpeed;
+	uint16_t nLastEncoderPosition;
+	uint32_t synchronousRatio;
+	int32_t synchronousPosition;
+	
 	// Config items
 	uint32_t nBacklash;
 	uint32_t nTicksPerRotation;
@@ -68,6 +73,8 @@ private:
 public:
 	Motion(TIM_HandleTypeDef *htimer) : htim(htimer)
 	{
+		bContinuousMode = false;
+		bSynchronousMotion = false;
 		bMotorClockwise = true;
 		nPendingMoveDistance = 0;
 		nPendingDestination = 0;
@@ -130,10 +137,20 @@ public:
 		// Update AB output
 		OutputQuadrature(nMotorPosition);
 
-		if (nVelocityCounter > 0)
-			nVelocityCounter--;
-		if (nVelocityCounter == 0)
-			MotionUpdate();
+		if (bSynchronousMotion)
+		{
+			if (nMotorPosition == nMotorDestination)
+			{
+				__HAL_TIM_DISABLE(htim);
+			}
+		}
+		else
+		{
+			if (nVelocityCounter > 0)
+				nVelocityCounter--;
+			if (nVelocityCounter == 0)
+				MotionUpdate();
+		}
 	}
 
 	// Degrees in 1000ths - Destination will always be +
@@ -178,25 +195,13 @@ public:
 		if (nDegrees == 0)
 			return;
 
-		unsigned long nAbsDegrees;
-		if (nDegrees < 0)
-			nAbsDegrees = -nDegrees;
-		else
-			nAbsDegrees = nDegrees;
-
-		uint64_t nTemp = (uint64_t)nAbsDegrees * (uint64_t)nTicksPerRotation;
-		uint32_t n = nTemp / 360000UL;
+		int32_t n = DegreesToSteps(nDegrees);
 
 		if (n == 0)
-			n = 1;
+			n = sign(nDegrees) * 1;
 
 		__disable_irq();
-
-		if (nDegrees < 0)
-			nPendingMoveDistance -= n;
-		else
-			nPendingMoveDistance += n;
-
+		nPendingMoveDistance += n;
 		__enable_irq();
 	}
 
@@ -204,9 +209,7 @@ public:
 	void MoveSteps(int32_t nSteps)
 	{
 		__disable_irq();
-
 		nPendingMoveDistance += nSteps;
-
 		__enable_irq();
 	}
 
@@ -407,7 +410,7 @@ public:
 				}
 		}
 	}
-
+	
 	int32_t MotorPosition()
 	{
 		__disable_irq();
@@ -423,6 +426,10 @@ public:
 
 	void MotorStop()
 	{
+		if (bSynchronousMotion)
+		{
+			eState = Motion::eStopped;
+		}
 		if (eState != Motion::eStopped)
 		{
 			if (eState == Motion::eDecelerating)
@@ -433,12 +440,132 @@ public:
 			{
 				__disable_irq();
 				eState = Motion::eDecelerating;
-				nDecTime = nVelocity / nAcceleration;
+				nPathAcceleration = nAcceleration;
+				nDecTime = nVelocity / nPathAcceleration;
 				if (nDecTime == 0)
 					nDecTime = 1;
 				__enable_irq();
 			}
 		}
+		bContinuousMode = false;
+		bSynchronousMotion = false;
+	}
+
+	void SetContinuousSpeed(int32_t nContinuousSpeed)
+	{
+		bool bDir = nContinuousSpeed >= 0;
+		targetContinuousSpeed = MakeRawSpeed(nContinuousSpeed);
+
+		if (eState == eStopped)
+		{
+			bMotorClockwise = bDir;	// only change direction if we are stopped
+			bContinuousMode = true;
+			// calculate time to accelerate to requested speed.
+			nPathAcceleration = nAcceleration;
+			if (nPathAcceleration > targetContinuousSpeed)
+				nPathAcceleration = targetContinuousSpeed;
+			if (nPathAcceleration == 0)
+				nPathAcceleration = 1;
+			nAccTime = targetContinuousSpeed / nPathAcceleration;
+			nDecTime = nAccTime;
+			nRunTime = 1;
+			nRunTimeFraction = 0;
+
+			nVelocity = 0;
+			eState = eAccelerating;
+			MotionUpdate();
+
+			EnableTimerInterrupt(true);
+		}
+		else if (eState == eRunning)
+		{
+			if (targetContinuousSpeed > nVelocity)
+			{
+				// calculate time to accelerate to the new velocity.
+				nPathAcceleration = nAcceleration;
+				if (nPathAcceleration > (targetContinuousSpeed - nVelocity))
+					nPathAcceleration = (targetContinuousSpeed - nVelocity);
+				if (nPathAcceleration == 0)
+					nPathAcceleration = 1;
+				nAccTime = (targetContinuousSpeed - nVelocity) / nPathAcceleration;
+				eState = eAccelerating;
+			}
+			else
+			{
+				// calculate time to decelerate to the new velocity.
+				nPathAcceleration = nAcceleration;
+				if (nPathAcceleration > (nVelocity - targetContinuousSpeed))
+					nPathAcceleration = (nVelocity - targetContinuousSpeed);
+				if (nPathAcceleration == 0)
+					nPathAcceleration = 1;
+				nDecTime = (nVelocity - targetContinuousSpeed) / nAcceleration;
+				eState = eDecelerating;
+			}
+		}
+	}
+	
+	void MSInterrupt()
+	{
+		if (bSynchronousMotion)
+		{
+			uint16_t encoderPosition = __HAL_TIM_GET_COUNTER(&htim2);
+			int16_t encoderDelta = encoderPosition - nLastEncoderPosition;
+			if (encoderDelta != 0)
+			{
+				nLastEncoderPosition = encoderPosition;
+			
+				synchronousPosition += encoderDelta;
+				nMotorDestination = synchronousPosition * nTicksPerRotation / synchronousRatio;
+				int32_t positionDelta = nMotorDestination - nMotorPosition;
+			
+				bMotorClockwise = positionDelta > 0 ? true : false;
+				// calculate the step timer - we need 2 * positionDelta interrupts in 1ms.
+				nVelocityTimer = 0xFFFF - (1000 / abs(positionDelta));
+				if (nVelocityTimer == 0xFFFF)
+					nVelocityTimer = 0xFFFE;
+				SetTimerCount(nVelocityTimer);
+				EnableTimerInterrupt(true);
+				__HAL_TIM_ENABLE(htim);
+			}
+		}
+	}
+
+	void StartSynchronised(uint32_t SynchronousStepsPerRev, uint32_t SynchronousRatio)
+	{
+		synchronousRatio = SynchronousRatio * SynchronousStepsPerRev;
+		bSynchronousMotion = true;
+		synchronousPosition = 0;
+		nMotorPosition = 0;
+		nMotorDestination = 0;
+		nLastEncoderPosition = 0;
+		bMotorClockwise = true;
+		eState = eRunning;
+		__HAL_TIM_SET_COUNTER(&htim2, 0);
+		__HAL_TIM_ENABLE(htim);
+	}
+	
+	uint32_t AbsDegreesToSteps( int32_t nDegrees )
+	{
+		while ( nDegrees >= 360000 )
+			nDegrees -= 360000;
+		while ( nDegrees < 0 )
+			nDegrees += 360000;
+
+		// Convert absolute position in degrees to absolute position in steps.
+		unsigned long long nSteps = nDegrees;
+		nSteps *= nTicksPerRotation;
+		nSteps /= 360000UL;
+
+		return nSteps;
+	}
+
+	int32_t DegreesToSteps( int32_t nDegrees )
+	{
+		long long nSteps = nDegrees;
+		nSteps *= nTicksPerRotation;
+		nSteps /= 360000UL;
+
+		return nSteps;
 	}
 	
 private:
@@ -498,7 +625,13 @@ private:
 				break;
 
 			case eRunning:
-				if ( !bContinuousMode )
+				if (bContinuousMode)
+				{
+					// Truncating errors can stop us reaching target velocity - fudge here.
+					if (targetContinuousSpeed != nNewVelocity)
+						nNewVelocity += sign(targetContinuousSpeed - nNewVelocity);
+				}
+				else if ( !bContinuousMode )
 					nRunTime--;
 				if ( nRunTime == 0 )
 					eState = eDecelerating;
@@ -512,7 +645,7 @@ private:
 					nNewVelocity -= nPathAcceleration;
 				if ( nDecTime == 0 )
 				{
-					if ( bContinuousMode )
+					if ( bContinuousMode )	// Continuous mode just changes speed.
 					{
 						eState = eRunning;
 					}
@@ -547,22 +680,6 @@ private:
 		else
 			nVelocityCounter = nVelocity;
 	}
-	
-	uint32_t AbsDegreesToSteps( int32_t nDegrees )
-	{
-		while ( nDegrees >= 360000 )
-			nDegrees -= 360000;
-		while ( nDegrees < 0 )
-			nDegrees += 360000;
-
-		// Convert absolute position in degrees to absolute position in steps.
-		unsigned long long nSteps = nDegrees;
-		nSteps *= nTicksPerRotation;
-		nSteps /= 360000UL;
-
-		return nSteps;
-	}
-
 
 	uint32_t MakeRawSpeed(int32_t nSpeed)	// Convert steps per second to ticks per interupt unit
 	{
@@ -588,57 +705,5 @@ private:
 		return (uint32_t)nTemp;
 	}
 
-	void SetContinuousSpeed(int32_t nContinuousSpeed)
-	{
-		bool bDir = nContinuousSpeed >= 0;
-		uint32_t nSpeed = MakeRawSpeed(nContinuousSpeed);
-
-		if (eState == eStopped)
-		{
-			bMotorClockwise = bDir;	// only change direction if we are stopped
-			bContinuousMode = true;
-			// calculate time to accelerate to requested speed.
-			nPathAcceleration = nAcceleration;
-			if (nPathAcceleration > nSpeed)
-				nPathAcceleration = nSpeed / 8;
-			if (nPathAcceleration == 0)
-				nPathAcceleration = 1;
-			nAccTime = nSpeed / nPathAcceleration;
-			nDecTime = nAccTime;
-			nRunTime = 1;
-			nRunTimeFraction = 0;
-
-			nVelocity = 0;
-			eState = eAccelerating;
-			MotionUpdate();
-
-			EnableTimerInterrupt(true);
-		}
-		else if (eState == eRunning)
-		{
-			if (nSpeed > nVelocity)
-			{
-				// calculate time to accelerate to the new velocity.
-				nPathAcceleration = nAcceleration;
-				if (nPathAcceleration > (nSpeed - nVelocity))
-					nPathAcceleration = (nSpeed - nVelocity) / 8;
-				if (nPathAcceleration == 0)
-					nPathAcceleration = 1;
-				nAccTime = (nSpeed - nVelocity) / nPathAcceleration;
-				eState = eAccelerating;
-			}
-			else
-			{
-				// calculate time to decelerate to the new velocity.
-				nPathAcceleration = nAcceleration;
-				if (nPathAcceleration > (nVelocity - nSpeed))
-					nPathAcceleration = (nVelocity - nSpeed) / 8;
-				if (nPathAcceleration == 0)
-					nPathAcceleration = 1;
-				nDecTime = (nVelocity - nSpeed) / nAcceleration;
-				eState = eDecelerating;
-			}
-		}
-	}
 };
 
