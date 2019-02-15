@@ -69,7 +69,7 @@ public:
 	void DoSynchronised();
 	void DoSegment();
 		
-	bool DrawSegment(bool block);
+	bool DrawSegment(uint32_t sequence, uint32_t sequences, uint32_t sequenceRepeats, bool block);
 	bool DrawSynchronised(bool block);
 	void DoGoto(uint8_t row);
 	bool DrawDivisions(bool block);

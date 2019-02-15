@@ -92,6 +92,7 @@ public:
 		KEY_UNITS	= KEY_15,
 		KEY_OK		= KEY_16,
 		KEY_GO		= KEY_16,
+		KEY_START	= KEY_STOP,
 		
 		KEY_NUM_7_PRESSED	= KEY_NUM_7	| KEY_PRESSED,
 		KEY_M1000_PRESSED	= KEY_M1000	| KEY_PRESSED,
@@ -124,6 +125,7 @@ public:
 		KEY_OK_PRESSED		= KEY_OK	| KEY_PRESSED,
 		KEY_GO_PRESSED		= KEY_GO	| KEY_PRESSED,
 		KEY_STOP_PRESSED	= KEY_STOP  | KEY_PRESSED,
+		KEY_START_PRESSED	= KEY_START | KEY_PRESSED,
 		
 	};
 	
@@ -161,11 +163,11 @@ public:
 		uint32_t mask = 1;
 		
 		// Poll the keys
-		for(int r = 0 ; r < countof(rows) ; r++)
+		for(uint r = 0 ; r < countof(rows) ; r++)
 		{
 			// Program the row pin to output and set it low
 			SetRowOutput(rows[r]);
-			for (int c = 0; c < countof(cols); c++)
+			for (uint c = 0; c < countof(cols); c++)
 			{
 				// read the columns
 				if ( HAL_GPIO_ReadPin(GPIO_KEYPAD_1_GPIO_Port,cols[c]) == GPIO_PIN_RESET )	// key pressed - pulled down

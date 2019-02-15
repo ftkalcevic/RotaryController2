@@ -21,6 +21,7 @@ class DisplayOLEDNHDUS2066
 		CMD_ENTRY_MODE_SET		= 0b00000100,
 		CMD_DISPLAY_CONTROL		= 0b00001000,
 		CMD_FUNCTION_SET		= 0b00100000,
+		CMD_SETCGRAM_ADDR		= 0b01000000,
 		CMD_SETDDRAM_ADDR		= 0b10000000,
 		EXTENSION_REGISTER_RE	= 0b00000010,
 		EXTENSION_REGISTER_IS	= 0b00000001,
@@ -71,7 +72,7 @@ class DisplayOLEDNHDUS2066
 		HAL_GPIO_WritePin(GPIO_DISPLAY_CS_GPIO_Port, GPIO_DISPLAY_CS_Pin, GPIO_PIN_SET);
 	}
 	
-	void SendData(uint8_t *mem, uint8_t len)
+	void SendData(const uint8_t *mem, uint8_t len)
 	{
 		uint8_t data[1+2*len];
 		data[0] = START | WRITE | MEMORY;
@@ -183,8 +184,9 @@ public:
 		SendCMD(fs1);
 	}
 	
-	void SetCGRamAddress()
+	void SetCGRamAddress(uint8_t addr)
 	{
+		SendCMD(CMD_SETCGRAM_ADDR | (addr & 0b00111111));
 	}
 	
 	void SetDDRamAddress(uint8_t addr)
@@ -197,9 +199,14 @@ public:
 		SendData(data);
 	}
 	
-	void RamWrite(uint8_t *data, uint8_t len)
+	void RamWrite(const uint8_t *data, uint8_t len)
 	{
 		SendData(data,len);
+	}
+	
+	void RamWrite(const char *data)
+	{
+		SendData((const uint8_t*)data,strlen(data));
 	}
 	
 	void SelectCharacterROM(uint8_t characterNumber, uint8_t characterROM )

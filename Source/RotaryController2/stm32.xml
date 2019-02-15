@@ -7,7 +7,7 @@
     <Revision>3</Revision>
   </ToolchainVersion>
   <BspID>com.sysprogs.arm.stm32</BspID>
-  <BspVersion>2018.08</BspVersion>
+  <BspVersion>2018.12</BspVersion>
   <McuID>STM32F103C8</McuID>
   <MCUDefinitionFile>STM32F1xxxx/DeviceDefinitions/stm32f103xb.xml</MCUDefinitionFile>
   <MCUProperties>
@@ -45,7 +45,7 @@
     <AllDependencies>
       <ProjectDependency>
         <RelativePath>RotaryController2.gpdsc</RelativePath>
-        <Timestamp>131935745575136925</Timestamp>
+        <Timestamp>131945786305553221</Timestamp>
       </ProjectDependency>
     </AllDependencies>
     <RootDirectory>

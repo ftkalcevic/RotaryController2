@@ -80,6 +80,7 @@ public:
 		nPendingDestination = 0;
 		bPendingDestination = false;
 		eState = eStopped;
+		SetMotorEnable(false);
 	}
 
 	void SetMotorConfig(uint32_t backlash, uint32_t stepsPerRevolution, uint32_t gearRatio, uint32_t maxVelocity, uint32_t acceleration)
@@ -215,6 +216,7 @@ public:
 
 	void UpdateMotorTravel(void)
 	{
+		SetMotorEnable(true);
 
 		// Need to move.
 		if (nPendingMoveDistance != 0 || bPendingDestination)
@@ -579,6 +581,11 @@ private:
 		if (!bPositiveMove)
 			state = !state;
 		HAL_GPIO_WritePin(GPIO_STEPPER_DIR_GPIO_Port, GPIO_STEPPER_DIR_Pin, state ? GPIO_PinState::GPIO_PIN_SET : GPIO_PinState::GPIO_PIN_RESET);
+	}
+	
+	void SetMotorEnable(bool state)
+	{
+		HAL_GPIO_WritePin(GPIO_STEPPER_DIR_GPIO_Port, GPIO_STEPPER_ENABLE_Pin, state ? GPIO_PinState::GPIO_PIN_SET : GPIO_PinState::GPIO_PIN_RESET);
 	}
 	
 	void OutputQuadrature(uint32_t nMotorPosition)

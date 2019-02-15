@@ -21,7 +21,7 @@ static EepromSPI25lc640 eepromDevice;
 static uint8_t activeDevice;
 
 #define MAX_DEVICES		2
-#define MAX_SEQUENCES	20
+#define MAX_SEGMENTS	20
 
 const char * const DeviceNames[MAX_DEVICES] = { "Rotary Table", "ER32 4th Axis" };
 const char * const bool_names[] = { "False", "True" };
@@ -60,9 +60,9 @@ struct Eeprom
 			uint32_t SynchronousRatio;				// synchronous ratio
 			bool SlowSpeedMode;						// true = slow, false = fast
 			uint32_t Divisions;						// the number of divisions around 360 degrees
-			uint8_t SequenceCount;					// number of divisions in division mode (up to MAX_DIVISIONS)
-			uint32_t Sequences[MAX_SEQUENCES];		
-			Units SequencesUnits;					// step or degrees
+			uint8_t SegmentCount;					// number of divisions in division mode (up to MAX_DIVISIONS)
+			uint32_t Segments[MAX_SEGMENTS];		
+			Units not_used;//SequencesUnits;					// step or degrees - always degrees
 			Units LastUnits;						// "last units" - degrees, steps?
 			uint32_t ContinuousSpeed;				// last continuous speed
 		} DeviceConfig[MAX_DEVICES];
@@ -115,9 +115,9 @@ void RotaryController::ReadEEPROM()
 		eeprom.Config.DeviceConfig[0].SynchronousRatio = 5;						// synchronous ratio
 		eeprom.Config.DeviceConfig[0].SlowSpeedMode = true;						// true = slow, false = fast
 		eeprom.Config.DeviceConfig[0].Divisions = 1;							// number of divisions in division mode
-		eeprom.Config.DeviceConfig[0].SequenceCount = 0;						// number of Sequences in sequence mode (up to MAX_SEQUENCES)
+		eeprom.Config.DeviceConfig[0].SegmentCount = 0;						// number of Sequences in sequence mode (up to MAX_SEQUENCES)
 		//eeprom.Config.DeviceConfig[0].Sequences[MAX_SEQUENCES];		
-		eeprom.Config.DeviceConfig[0].SequencesUnits = Units::Degrees;			// step or degrees
+		//eeprom.Config.DeviceConfig[0].SequencesUnits = Units::Degrees;			// step or degrees
 		eeprom.Config.DeviceConfig[0].LastUnits = Units::Steps;					// degrees, steps
 		eeprom.Config.DeviceConfig[0].ContinuousSpeed = 500;					// last continuous speed
 		
@@ -135,9 +135,9 @@ void RotaryController::ReadEEPROM()
 		eeprom.Config.DeviceConfig[1].SynchronousRatio = 5;						// synchronous ratio
 		eeprom.Config.DeviceConfig[1].SlowSpeedMode = true;						// true = slow, false = fast
 		eeprom.Config.DeviceConfig[1].Divisions = 1;							// number of divisions in division mode
-		eeprom.Config.DeviceConfig[1].SequenceCount = 0;						// number of Sequences in sequence mode (up to MAX_SEQUENCES)
+		eeprom.Config.DeviceConfig[1].SegmentCount = 0;						// number of Sequences in sequence mode (up to MAX_SEQUENCES)
 		//eeprom.Config.DeviceConfig[0].Sequences[MAX_SEQUENCES];		
-		eeprom.Config.DeviceConfig[1].SequencesUnits = Units::Degrees;			// step or degrees
+		//eeprom.Config.DeviceConfig[1].SequencesUnits = Units::Degrees;			// step or degrees
 		eeprom.Config.DeviceConfig[1].LastUnits = Units::Steps;					// degrees, steps
 		eeprom.Config.DeviceConfig[1].ContinuousSpeed = 500;					// last continuous speed
 		
@@ -229,14 +229,14 @@ struct MenuItem setupMenu[] =
 	{ "Device", &eeprom.Config.SelectedDevice, ENUM, 0, 1, DeviceNames, &RotaryController::DoSetupChangeDevice },
 	{ "Motor Steps Per Rev.", &eeprom.Config.DeviceConfig[0].MotorStepsPerRevolution, UINT32, 1, 10000, NULL, NULL },
 	{ "Gear Ratio", &eeprom.Config.DeviceConfig[0].DeviceGearRatio, UINT32, 1, 10000, NULL, NULL },
-	{ "Backlash", &eeprom.Config.DeviceConfig[0].Backlash, UINT32, 1, 10000, NULL, NULL },
+	{ "Backlash", &eeprom.Config.DeviceConfig[0].Backlash, UINT32, 0, 1000, NULL, NULL },
 	{ "Reverse Motor", &eeprom.Config.DeviceConfig[0].ReverseDirection, BOOL, 0, 0, NULL, NULL },
-	{ "Slow Max Vel", &eeprom.Config.DeviceConfig[0].SlowVelocityMax, UINT32, 1, 10000, NULL, NULL },
-	{ "Slow Acc", &eeprom.Config.DeviceConfig[0].SlowAcceleration, UINT32, 1, 10000, NULL, NULL },
+	{ "Slow Max Vel", &eeprom.Config.DeviceConfig[0].SlowVelocityMax, UINT32, 1, 99999, NULL, NULL },
+	{ "Slow Acc", &eeprom.Config.DeviceConfig[0].SlowAcceleration, UINT32, 1, 99999, NULL, NULL },
 	{ "Slow SFM", &eeprom.Config.DeviceConfig[0].SlowSFM, UINT32, 1, 10000, NULL, NULL },
 	{ "Slow Rad.", &eeprom.Config.DeviceConfig[0].SlowRadius, UINT32, 1, 10000, NULL, NULL },
-	{ "Fast Max Vel", &eeprom.Config.DeviceConfig[0].FastVelocityMax, UINT32, 1, 10000, NULL, NULL },
-	{ "Fast Acc", &eeprom.Config.DeviceConfig[0].FastAcceleration, UINT32, 1, 10000, NULL, NULL },
+	{ "Fast Max Vel", &eeprom.Config.DeviceConfig[0].FastVelocityMax, UINT32, 1, 99999, NULL, NULL },
+	{ "Fast Acc", &eeprom.Config.DeviceConfig[0].FastAcceleration, UINT32, 1, 99999, NULL, NULL },
 	{ "Sync Steps per Rev.", &eeprom.Config.DeviceConfig[0].SynchronousStepsPerRev, UINT32, 1, 10000, NULL, NULL },
 	{ "Sync Ratio", &eeprom.Config.DeviceConfig[0].SynchronousRatio, UINT32, 1, 1000, NULL, NULL },
 };
@@ -412,6 +412,7 @@ bool RotaryController::EditUInt32Frac( uint8_t col, uint8_t row, uint32_t *nValu
 	{
 		uint8_t keyValue;
 		uint32_t key = DoKeyScanEtc();
+		
 		if ( key == Keys::KEY_OK_PRESSED )
 		{
 			uint32_t nRet = 0;
@@ -450,7 +451,8 @@ bool RotaryController::EditUInt32Frac( uint8_t col, uint8_t row, uint32_t *nValu
 				break;
 			}
 		}
-		else if ( key == Keys::KEY_GOTO_PRESSED )
+		else if ( key == Keys::KEY_GOTO_PRESSED ||
+			      key == Keys::KEY_MODE_PRESSED )
 		{ 
 			break;
 		}
@@ -687,6 +689,7 @@ bool RotaryController::DrawJog(bool block)
 {
 	display.ClearScreen();
 	display.Text(0,0,"JOG");
+	ShowRotateSpeed();
 	
 	display.Text(0, 1, movementUnits == Units::Degrees ? "Degrees" : "Steps");
 	
@@ -819,6 +822,7 @@ void RotaryController::DoJog()
 		else if (key == Keys::KEY_SPEED_PRESSED)
 		{
 			ToggleSpeed();
+			redrawDisplay = true;
 		}		
 		else if (key == Keys::KEY_UNITS_PRESSED)
 		{
@@ -854,6 +858,7 @@ bool RotaryController::DrawDivisions(bool block)
 {
 	display.ClearScreen();
 	display.Text(0,0,"DIVISION");
+	ShowRotateSpeed();
 	
 	char buf[21];
 	snprintf(buf, sizeof(buf), "Division: %d/%d", division+1, divisions);
@@ -947,6 +952,7 @@ void RotaryController::DoDivisions()
 		else if (key == Keys::KEY_SPEED_PRESSED)
 		{
 			ToggleSpeed();
+			redrawDisplay = true;
 		}		
 		else if (key == Keys::KEY_STOP_PRESSED)
 		{
@@ -987,9 +993,9 @@ void RotaryController::DoDivisions()
 void RotaryController::ShowRotateSpeed()
 {
 	if ( isSlowSpeed )
-		display.Text(19,0,'S');
+		display.Text(19,0,(char)0);
 	else
-		display.Text(19,0,'F');
+		display.Text(19,0,(char)1);
 }
 
 bool RotaryController::DrawContinous(bool block)
@@ -1077,35 +1083,26 @@ void RotaryController::DoContinuous( void )
 		{
 			break;
 		}
-		else if (key == Keys::KEY_GOTO_PRESSED)
+		else if (key == Keys::KEY_GOTO_PRESSED && motion.eState == Motion::eStopped )
 		{
 			DoGoto(1);
 			redrawDisplay = true;
 		}
-		else if ( key == Keys::KEY_STOP_PRESSED )
+		else if ( key == Keys::KEY_ZERO_PRESSED && motion.eState == Motion::eStopped )
 		{
-			// stop
-			if ( motion.eState != Motion::eStopped )
-			{
-				motion.MotorStop();
-			}
+			motion.ResetMotorCounters();
+			redrawDisplay = true;
 		}
-		else if ( key == Keys::KEY_ZERO_PRESSED )
-		{
-			if ( motion.eState == Motion::eStopped )
-			{
-				motion.ResetMotorCounters();
-				redrawDisplay = true;
-			}
-		}
-		else if ( key == Keys::KEY_OK_PRESSED )
+		else if ( key == Keys::KEY_START_PRESSED && motion.eState == Motion::eStopped)
 		{
 			// Start
-			if(motion.eState == Motion::eStopped)
-			{
-				motion.SetContinuousSpeed(continuousSpeed);
-				SetRunButton(true);
-			}
+			motion.SetContinuousSpeed(continuousSpeed);
+			SetRunButton(true);
+		}
+		else if ( key == Keys::KEY_STOP_PRESSED  && motion.eState != Motion::eStopped)
+		{
+			// stop
+			motion.MotorStop();
 		}
 		else if ( key == Keys::KEY_SPEED_PRESSED )
 		{
@@ -1127,12 +1124,10 @@ void RotaryController::DoContinuous( void )
 		if (lastPosition != motion.MotorPosition())
 		{
 			redrawDisplay = true;
-			if (motion.MotorPosition() == motion.MotorDesitination() || motion.eState == Motion::eStopped)
-			{
-				SetRunButton(false);
-				buzzer.Beep();
-			}
 			lastPosition = motion.MotorPosition();
+			
+			if ( motion.eState == Motion::eStopped)
+				SetRunButton(false);
 		}
 		
 	}
@@ -1144,13 +1139,17 @@ void RotaryController::DoContinuous( void )
 	}
 }
 
-bool RotaryController::DrawSegment(bool block)
+bool RotaryController::DrawSegment(uint32_t segment, uint32_t segments, uint32_t segmentRepeats, bool block)
 {
 	display.ClearScreen();
 	display.Text(0,0,"SEGMENT");
+	ShowRotateSpeed();
 	
-	display.Text(0,1,"Seg: 1/4");
-	display.Text(10,1,"Rpt: 1");
+	char buf[21];
+	snprintf(buf,sizeof(buf),"Seg: %d/%d", segment+1, segments);
+	display.Text(0,1,buf);
+	snprintf(buf,sizeof(buf),"Rpt: %d", segmentRepeats+1);
+	display.Text(10,1,buf);
 	DisplayCoordinates();
 
 	return display.Update(block);
@@ -1159,16 +1158,37 @@ bool RotaryController::DrawSegment(bool block)
 
 void RotaryController::DoSegment()
 {
-	bool redrawDisplay = true;
+	bool redrawDisplay = true, calculateSteps = true;
 	uint32_t next_redraw = 0;
 	int32_t lastPosition = 0;
+	uint32_t nTotalDegreesPerSeries;
+	uint32_t nSegment;
+	uint32_t nSegmentRepeats = 0;
+	uint32_t nSegments;
+	uint32_t nDegrees[MAX_SEGMENTS];
+	
 	for (;;)
 	{
+		if (calculateSteps)
+		{
+			nSegments = eeprom.Config.DeviceConfig[activeDevice].SegmentCount;
+			nTotalDegreesPerSeries = 0;
+
+			for ( nSegment = 0; nSegment < nSegments; nSegment++ )
+			{
+				uint32_t degrees = eeprom.Config.DeviceConfig[activeDevice].Segments[nSegment];
+				nDegrees[nSegment] =  nTotalDegreesPerSeries;
+				nTotalDegreesPerSeries += degrees;
+			}			
+			nSegment = 0;
+			calculateSteps = false;
+		}
+		
 		if ( HAL_GetTick() > next_redraw )
 		{
 			if (redrawDisplay)
 			{
-				if ( DrawSegment(false) )
+				if ( DrawSegment(nSegment, nSegments, nSegmentRepeats, false) )
 					redrawDisplay = false;
 			}
 			const int DISPLAY_UPDATE_PERIOD = 50;	// 20 times per second
@@ -1179,25 +1199,103 @@ void RotaryController::DoSegment()
 		if (key == (Keys::KEY_MODE_PRESSED))
 			break;
 		
-		else if ( key == Keys::KEY_MODE_PRESSED && motion.eState == Motion::eStopped )
+		else if (key == Keys::KEY_MODE_PRESSED && motion.eState == Motion::eStopped)
 		{
 			break;
 		}
-		else if ( key == Keys::KEY_STOP_PRESSED )
+		else if (key == Keys::KEY_STOP_PRESSED && motion.eState != Motion::eStopped)
 		{
-			// stop
-			if ( motion.eState != Motion::eStopped )
-			{
-				motion.MotorStop();
-			}
+			motion.MotorStop();
 		}
-		else if ( key == Keys::KEY_OK_PRESSED )
+		else if (key == Keys::KEY_OK_PRESSED && motion.eState == Motion::eStopped)
 		{
-			// Start
-			if(motion.eState == Motion::eStopped)
+			uint8_t nSegments = 0;
+			for (; nSegments < MAX_SEGMENTS; nSegments++)
 			{
-				SetRunButton(true);
+				display.ClearRow(1);
+				char buf[21];
+				snprintf(buf, sizeof(buf), "%d>", nSegments + 1);
+				display.Text(0, 1, buf);
+
+				uint32_t degrees;
+				if (nSegments < eeprom.Config.DeviceConfig[activeDevice].SegmentCount)
+					degrees = eeprom.Config.DeviceConfig[activeDevice].Segments[nSegments];
+				else 
+					degrees = 0;
+				
+				if (!EditUInt32Frac(strlen(buf) + 1, 1, &degrees))
+					break;
+
+				eeprom.Config.DeviceConfig[activeDevice].Segments[nSegments] = degrees;
+			}			
+			eeprom.Config.DeviceConfig[activeDevice].SegmentCount = nSegments;
+			WriteEEPROM();
+			redrawDisplay = true;
+			calculateSteps = true;
+		}
+		else if ((key == Keys::KEY_RIGHT_PRESSED || key == Keys::KEY_LEFT_PRESSED) && motion.eState == Motion::eStopped)
+		{
+			bool bClockwise = true;
+			if (key == Keys::KEY_LEFT_PRESSED)
+				bClockwise = false;
+
+			if (bClockwise)
+			{
+				if (nSegment == nSegments - 1)	// Wrap
+					{
+						nSegment = 0;
+						nSegmentRepeats++;
+					}
+				else
+					nSegment++;
 			}
+			else
+			{
+				if (nSegment == 0)
+				{
+					nSegment = nSegments - 1;
+					nSegmentRepeats--;
+				}
+				else
+					nSegment--;
+			}
+
+			int32_t nSegmentDestination = nDegrees[nSegment % nSegments] + ((int32_t)nSegmentRepeats) * (int32_t)nTotalDegreesPerSeries;
+			if (bClockwise)
+				motion.MoveToDegreesCW(nSegmentDestination);
+			else
+				motion.MoveToDegreesCCW(nSegmentDestination);
+			SetRunButton(true);
+
+			//			if ( !bClockwise && nBacklash > 0 )
+			//				motion.MoveSteps( -(int32_t)nBacklash );
+
+						motion.UpdateMotorTravel();
+			//nSequencePosition = nSequenceDestination;
+
+//			if ( !WaitForMotor() )
+//				bStopped = true;
+//			else
+//			{
+//				if ( !bClockwise && nBacklash > 0 )
+//				{
+//					MoveSteps( nBacklash );
+//					UpdateMotorTravel();
+//					if ( !WaitForMotor() )
+//						bStopped = true;
+//				}
+//			}
+			redrawDisplay = true;
+		}
+		else if (key == Keys::KEY_ZERO_PRESSED && motion.eState == Motion::eStopped)
+		{
+			motion.ResetMotorCounters();
+			redrawDisplay = true;
+		}	
+		else if (key == Keys::KEY_SPEED_PRESSED)
+		{
+			ToggleSpeed();
+			redrawDisplay = true;
 		}
 		
 		if (lastPosition != motion.MotorPosition())
@@ -1267,15 +1365,12 @@ void RotaryController::DoSynchronised()
 		{
 			break;
 		}
-		else if ( key == Keys::KEY_STOP_PRESSED )
+		else if ( key == Keys::KEY_STOP_PRESSED && motion.eState != Motion::eStopped )
 		{
 			// stop
-			if ( motion.eState != Motion::eStopped )
-			{
-				motion.MotorStop();
-			}
+			motion.MotorStop();
 		}
-		else if ( key == Keys::KEY_OK_PRESSED )
+		else if ( key == Keys::KEY_START_PRESSED && motion.eState == Motion::eStopped )
 		{
 			// Start
 			motion.StartSynchronised(eeprom.Config.DeviceConfig[activeDevice].SynchronousStepsPerRev, eeprom.Config.DeviceConfig[activeDevice].SynchronousRatio);

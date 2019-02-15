@@ -30,6 +30,11 @@ public:
 		displayDevice->SelectCharacterROM(0,1);
 		displayDevice->SetContrast(50);
 		
+		displayDevice->SetCGRamAddress( 0x40 );
+		displayDevice->RamWrite("\xff\xf9\xf7\xfB\xfD\xf3\xff\xff");		// 0x00, Inverse S	
+		displayDevice->RamWrite("\xff\xf1\xf7\xf3\xf7\xf7\xff\xff");		// 0x01, Inverse F
+		displayDevice->RamWrite("\x08\x14\x04\x08\x1C\x00\x00\x00");		// 0x02, ^2 (squared)
+		
 		ClearScreen();
 	}
 	
