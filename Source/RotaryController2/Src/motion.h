@@ -3,10 +3,15 @@
 #include "main.h"
 #include "dwt_stm32_delay.h"
 
+#define STEP_PULSE_HIGH_US 4
+
+class MotionTests;
 
 class Motion
 {
 public:
+	friend MotionTests;
+
 	enum ESTATE
 	{
 		eAccelerating,
@@ -73,6 +78,7 @@ private:
 public:
 	Motion(TIM_HandleTypeDef *htimer) : htim(htimer)
 	{
+		SetMotorEnable(false);
 		bContinuousMode = false;
 		bSynchronousMotion = false;
 		bMotorClockwise = true;
@@ -80,7 +86,7 @@ public:
 		nPendingDestination = 0;
 		bPendingDestination = false;
 		eState = eStopped;
-		SetMotorEnable(false);
+		ResetMotorCounters();
 	}
 
 	void SetMotorConfig(uint32_t backlash, uint32_t stepsPerRevolution, uint32_t gearRatio, uint32_t maxVelocity, uint32_t acceleration)
@@ -221,195 +227,280 @@ public:
 		// Need to move.
 		if (nPendingMoveDistance != 0 || bPendingDestination)
 		{
-#ifdef MOVINGSUPPORT
-			if (nMotorC != 0)		// Are we moving?
+			if ( eState != Motion::eStopped ) // Are we moving?
 			{
 				// Don't interrupt while we calculate this.
 				__disable_irq();
-
-				if (bMotorAccelerating)
+				
+				// if we are updating half way through a cycle, force complete the cycle
+				ESTATE currentState = eState;
+				if (interrupt_tick & 1)
 				{
-					// Still accelerating - just update the mid point, which is the decelerate position
-					nMotorDeceleratePosition = (nMotorDestination + nMotorStartPosition) / 2;
+					TimerInterruptHandler();
 				}
-				else if (bMotorDecelerating)
-				{
-					nMotorDeceleratePosition = (nMotorDestination + nMotorStartPosition) / 2;
 
-					if ((bMotorClockwise && nMotorPosition < nMotorDeceleratePosition) ||
-						(!bMotorClockwise && nMotorPosition > nMotorDeceleratePosition))
-						bMotorAccelerating = true;
+				// New "to go" distance - "still to go" + "change"
+				uint32_t distanceToMove = nMotorDestination - nMotorPosition + nPendingMoveDistance;
+
+				// x = 1/2 a t2 + u t
+				// v = a t + u
+
+				// x = 1/2 a t2 + u t
+				uint32_t decelerateDistanceFromV0 = nAcceleration * (nDecTime) * (nDecTime) / 2;
+				if (decelerateDistanceFromV0 >= distanceToMove)
+				{
+					// decelerating now, will get us to the new position.
+					// Compute new deceleration settings
+					distanceToMove = distanceToMove + 0;
+				}
+				else if (currentState == Motion::eRunning)
+				{
+					// We are at Vmax.  Coast, then decelerate
+					uint32_t additionalRunDistance = distanceToMove - decelerateDistanceFromV0;
+					// Update runtime/runfraction
+					
+					// x = vt
+					nRunTime = additionalRunDistance / nVelocity;
+					nVelocityCounter = additionalRunDistance % nVelocity;
+					nRunTime++;
+					nRunTimeFraction = nVelocity/2;	// correct for integer decleration point?
+					eState = Motion::eRunning;
+					
+					// use existing deceleration settings
+					
+					nMotorDestination += nPendingMoveDistance;
 				}
 				else
 				{
-					// Not Acc or Dec, just continue to coast
-					nMotorDeceleratePosition = nMotorDestination - (nMotorMaxSpeedPosition - nMotorStartPosition);
+					// Else, accelerate from V0, optional coast, decelerate.  Similar to below, but not symetrical V0 != Vf
+					int32_t timeDecelerate = nMaxVelocity / nAcceleration;
+					uint32_t distanceDecelerate = nMaxVelocity * timeDecelerate / 2;	// don't divide distances
+					int32_t timeAccelerate = (nMaxVelocity - nVelocity) / nAcceleration;
+					uint32_t distanceAccelerateFromV0 = nVelocity * timeAccelerate + (nMaxVelocity - nVelocity) * timeAccelerate / 2;	// don't divide distances
+					if (distanceAccelerateFromV0 + distanceDecelerate <= distanceToMove)
+					{
+						// we can accelerate to Vmax
+						nPathAcceleration = nAcceleration;
+						int nPeakVelocity = nVelocity + timeAccelerate * nPathAcceleration;
+						
+						distanceAccelerateFromV0 = nVelocity * timeAccelerate + (nPeakVelocity - nVelocity) * timeAccelerate / 2;	// don't divide distances
+						
+						timeDecelerate = nPeakVelocity / nPathAcceleration;
+						distanceDecelerate = nPeakVelocity * timeDecelerate / 2;	// don't divide distances
+
+						nAccTime = timeAccelerate;
+						nDecTime = timeDecelerate;
+						uint32_t runDistance = distanceToMove - distanceAccelerateFromV0 - distanceDecelerate - nVelocity/2;
+						nRunTime = runDistance / nPeakVelocity;
+						nRunTimeFraction = runDistance % nPeakVelocity;
+						if (nRunTimeFraction != 0)
+							nRunTime++;
+						eState = Motion::eAccelerating;
+						nMotorDestination += nPendingMoveDistance;
+						nVelocityCounter = nVelocity;
+					}
+					else
+					{
+						// Can't accelerate to Vmax
+						// Find v
+						uint32_t n = (2*nAcceleration*distanceToMove + nVelocity * nVelocity) / 2;
+						uint32_t targetVelocity = isqrt32(n);
+						
+						nPathAcceleration = nAcceleration;
+						timeAccelerate = (targetVelocity - nVelocity) / nAcceleration;
+						if (timeAccelerate < 0)
+							timeAccelerate = 0;
+						
+						int nPeakVelocity = nVelocity + timeAccelerate * nPathAcceleration;
+						distanceAccelerateFromV0 = nVelocity * timeAccelerate + (nPeakVelocity - nVelocity) * timeAccelerate / 2;	// don't divide distances
+						
+						timeDecelerate = nPeakVelocity / nPathAcceleration;
+						distanceDecelerate = nPeakVelocity * timeDecelerate / 2;	// don't divide distances
+						
+						nAccTime = timeAccelerate;
+						nDecTime = timeDecelerate;
+						uint32_t runDistance = distanceToMove - distanceAccelerateFromV0 - distanceDecelerate - nVelocity/2;
+						nRunTime = runDistance / nPeakVelocity;
+						nRunTimeFraction = runDistance % nPeakVelocity;
+						if (nRunTimeFraction != 0)
+							nRunTime++;
+						if ( nAccTime > 0 )
+							eState = Motion::eAccelerating;
+						else if ( nRunTime > 0 )
+							eState = Motion::eRunning;
+						else
+							eState = Motion::eDecelerating;
+						nMotorDestination += nPendingMoveDistance;
+						nVelocityCounter = nVelocity;
+					}
 				}
 
 				__enable_irq();
+				nPendingMoveDistance=0;
+				bPendingDestination = false;
 			}
 			else
-#endif
-				if (eState == eStopped)
+			{
+				long nDistance;
+				interrupt_tick = 0;
+
+				if (bPendingDestination)
 				{
-					long nDistance;
-					interrupt_tick = 0;
-
-					if (bPendingDestination)
+					long nDiff = nPendingDestination - nMotorPosition;
+					long nAbsDiff = nDiff < 0 ? -nDiff : nDiff;
+					if (nAbsDiff < 4*nBacklash || nAbsDiff - 4 * nBacklash < (long)nTicksPerRotation / 2)		// find the shortest route, CW or CCW
 					{
-						long nDiff = nPendingDestination - nMotorPosition;
-						long nAbsDiff = nDiff < 0 ? -nDiff : nDiff;
-						if (nAbsDiff < 4*nBacklash || nAbsDiff - 4 * nBacklash < (long)nTicksPerRotation / 2)		// find the shortest route, CW or CCW
-						{
-							if (nDiff < 0)
-								bMotorClockwise = false;
-							else
-								bMotorClockwise = true;
-							nDistance = nAbsDiff;
-						}
+						if (nDiff < 0)
+							bMotorClockwise = false;
 						else
-						{
-							// wrap 360
-							if (nDiff < 0)
-							{
-								nDistance = nDiff + (long)nTicksPerRotation;
-								bMotorClockwise = true;
-							}
-							else
-							{
-								nDistance = nDiff - (long)nTicksPerRotation;
-								bMotorClockwise = false;
-							}
-							nDistance = nDistance < 0 ? -nDistance : nDistance;
-						}
-						nMotorDestination = nPendingDestination;
-
-						// Add a pending move.  This may change direction of the goto.
-						if (nPendingMoveDistance != 0)
-						{
-							if (bMotorClockwise)
-								nDistance += nPendingMoveDistance;
-							else
-								nDistance -= nPendingMoveDistance;
-							if (nDistance < 0)
-							{
-								nDistance = -nDistance;
-								bMotorClockwise = !bMotorClockwise;
-							}
-							nMotorDestination += nPendingMoveDistance;
-						}
+							bMotorClockwise = true;
+						nDistance = nAbsDiff;
 					}
 					else
 					{
-						if (nPendingMoveDistance < 0)
+						// wrap 360
+						if (nDiff < 0)
 						{
-							bMotorClockwise = false;
-							nDistance = -nPendingMoveDistance;
+							nDistance = nDiff + (long)nTicksPerRotation;
+							bMotorClockwise = true;
 						}
 						else
 						{
-							bMotorClockwise = true;
-							nDistance = nPendingMoveDistance;
+							nDistance = nDiff - (long)nTicksPerRotation;
+							bMotorClockwise = false;
+						}
+						nDistance = nDistance < 0 ? -nDistance : nDistance;
+					}
+					nMotorDestination = nPendingDestination;
+
+					// Add a pending move.  This may change direction of the goto.
+					if (nPendingMoveDistance != 0)
+					{
+						if (bMotorClockwise)
+							nDistance += nPendingMoveDistance;
+						else
+							nDistance -= nPendingMoveDistance;
+						if (nDistance < 0)
+						{
+							nDistance = -nDistance;
+							bMotorClockwise = !bMotorClockwise;
 						}
 						nMotorDestination += nPendingMoveDistance;
 					}
-
-					while (nMotorDestination >= (long)nTicksPerRotation)
-						nMotorDestination -= (long)nTicksPerRotation;
-
-					while (nMotorDestination < 0)
-						nMotorDestination += (long)nTicksPerRotation;
-
-					nPendingMoveDistance = 0;
-					bPendingDestination = false;
-
-					if (nDistance == 0)
+				}
+				else
+				{
+					if (nPendingMoveDistance < 0)
 					{
-						return;
-					}
-					else if (nDistance == 1)
-					{
-						// fudge.
-
-						// Move to the next step
-						if (bMotorClockwise)
-							SetMotorDirection(true);
-						else
-							SetMotorDirection(false);
-
-						// TODO - use on pulse timer feature
-						SetMotorStep(true);
-						DWT_Delay_us(2);
-						SetMotorStep(false);
-
-						// We always step 1 unit at a time.
-						if (bMotorClockwise)
-							nMotorPosition++;
-						else
-							nMotorPosition--;
-
-						// Update AB output
-						OutputQuadrature(nMotorPosition);
-						return;
-					}
-
-
-					// Precompute the path
-					nPathAcceleration = nAcceleration;
-					int nMaxAccelerationTime = nMaxVelocity / nPathAcceleration;
-					long nMaxAccelerationDistanceX2 = (long)nPathAcceleration * (long)nMaxAccelerationTime * (long)nMaxAccelerationTime;
-
-					nRunTimeFraction = 0;
-					nAccTime = 0;
-					nRunTime = 0;
-					nDecTime = 0;
-
-					if (nDistance > 2 * nMaxAccelerationDistanceX2)	// *2 for acc + dec
-					{
-						// Accelerate to max, run, then decelerate.
-						// We fiddle with the run time to get the correct distance.
-						nAccTime = nMaxAccelerationTime;
-						int nPeakVelocity = nAccTime * nPathAcceleration;
-						nRunTime = (nDistance - nMaxAccelerationDistanceX2) / nPeakVelocity;
-						nDecTime = nMaxAccelerationTime;
-
-						// Calculate the run time fraction - extra steps of const vel required to complete the trip
-						nRunTimeFraction = (nDistance - nMaxAccelerationDistanceX2) % nPeakVelocity;
-						if (nRunTimeFraction != 0)
-							nRunTime++;
+						bMotorClockwise = false;
+						nDistance = -nPendingMoveDistance;
 					}
 					else
 					{
-						// We won't get to max without overruning the end.
-						// Accelerate, short run, decelerate.
-						if (nPathAcceleration * 2 > nDistance)
-						{
-							// Problem.  Acceleration is too fast.
-							nPathAcceleration = nDistance / 4;
-						}
-						//nAccTime = isqrt32((2 * (nDistance / 2) / nPathAcceleration));
-						nAccTime = isqrt32(nDistance / nPathAcceleration);
-						int32_t nAccelerationDistanceX2 = nPathAcceleration * nAccTime * nAccTime;
-						int32_t nPeakVelocity = nAccTime * nPathAcceleration;
-						nRunTime = (nDistance - nAccelerationDistanceX2) / nPeakVelocity;
-						nDecTime = nAccTime;
-
-						// Calculate the run time fraction.
-						nRunTimeFraction = (nDistance - nAccelerationDistanceX2) % nPeakVelocity;
-						if (nRunTimeFraction != 0)
-							nRunTime++;
+						bMotorClockwise = true;
+						nDistance = nPendingMoveDistance;
 					}
-
-
-					// Need to move
-
-					// Power up motor.
-					nVelocity = 0;
-					eState = eAccelerating;
-					MotionUpdate();
-
-					EnableTimerInterrupt(true);
+					nMotorDestination += nPendingMoveDistance;
 				}
+
+				while (nMotorDestination >= (long)nTicksPerRotation)
+					nMotorDestination -= (long)nTicksPerRotation;
+
+				while (nMotorDestination < 0)
+					nMotorDestination += (long)nTicksPerRotation;
+
+				nPendingMoveDistance = 0;
+				bPendingDestination = false;
+
+				if (nDistance == 0)
+				{
+					return;
+				}
+				else if (nDistance == 1)
+				{
+					// fudge.
+
+					// Move to the next step
+					if (bMotorClockwise)
+						SetMotorDirection(true);
+					else
+						SetMotorDirection(false);
+
+					// TODO - use one pulse timer feature.  Delays are bad.
+					SetMotorStep(true);
+					DWT_Delay_us(STEP_PULSE_HIGH_US);
+					SetMotorStep(false);
+
+					// We always step 1 unit at a time.
+					if (bMotorClockwise)
+						nMotorPosition++;
+					else
+						nMotorPosition--;
+
+					// Update AB output
+					OutputQuadrature(nMotorPosition);
+					return;
+				}
+
+
+				// Precompute the path
+				nPathAcceleration = nAcceleration;
+				int nMaxAccelerationTime = nMaxVelocity / nPathAcceleration;
+				long nMaxAccelerationDistanceX2 = (long)nPathAcceleration * (long)nMaxAccelerationTime * (long)nMaxAccelerationTime;
+
+				nRunTimeFraction = 0;
+				nAccTime = 0;
+				nRunTime = 0;
+				nDecTime = 0;
+
+				if (nDistance > 2 * nMaxAccelerationDistanceX2)	// *2 for acc + dec
+				{
+					// Accelerate to max, run, then decelerate.
+					// We fiddle with the run time to get the correct distance.
+					nAccTime = nMaxAccelerationTime;
+					int nPeakVelocity = nAccTime * nPathAcceleration;
+					nRunTime = (nDistance - nMaxAccelerationDistanceX2) / nPeakVelocity;
+					nDecTime = nMaxAccelerationTime;
+
+					// Calculate the run time fraction - extra steps of const vel required to complete the trip
+					// todo - use div_t t = div()
+					nRunTimeFraction = (nDistance - nMaxAccelerationDistanceX2) % nPeakVelocity;
+					if (nRunTimeFraction != 0)
+						nRunTime++;
+				}
+				else
+				{
+					// We won't get to max without overruning the end.
+					// Accelerate, short run, decelerate.
+					if (nPathAcceleration * 2 > nDistance)
+					{
+						// Problem.  Acceleration is too fast.
+						nPathAcceleration = nDistance / 4;
+					}
+					//nAccTime = isqrt32((2 * (nDistance / 2) / nPathAcceleration));
+					nAccTime = isqrt32(nDistance / nPathAcceleration);
+					int32_t nAccelerationDistanceX2 = nPathAcceleration * nAccTime * nAccTime;
+					int32_t nPeakVelocity = nAccTime * nPathAcceleration;
+					nRunTime = (nDistance - nAccelerationDistanceX2) / nPeakVelocity;
+					nDecTime = nAccTime;
+
+					// Calculate the run time fraction.
+					// todo - use div_t t = div()
+					nRunTimeFraction = (nDistance - nAccelerationDistanceX2) % nPeakVelocity;
+					if (nRunTimeFraction != 0)
+						nRunTime++;
+				}
+
+
+				// Need to move
+
+				// Power up motor.
+				nVelocity = 0;
+				eState = eAccelerating;
+				MotionUpdate();
+
+				EnableTimerInterrupt(true);
+			}
 		}
 	}
 	
@@ -558,7 +649,7 @@ public:
 		nSteps *= nTicksPerRotation;
 		nSteps /= 360000UL;
 
-		return nSteps;
+		return (uint32_t)nSteps;
 	}
 
 	int32_t DegreesToSteps( int32_t nDegrees )
@@ -567,7 +658,7 @@ public:
 		nSteps *= nTicksPerRotation;
 		nSteps /= 360000UL;
 
-		return nSteps;
+		return (uint32_t)nSteps;
 	}
 	
 private:
@@ -669,14 +760,14 @@ private:
 		}
 
 		// set timer counter to -COUNT, so we overflow at next time step
-		if ( nNewVelocity != nVelocity )
+		if ( nNewVelocity != nVelocity && nNewVelocity != 0 )
 		{
 			// Change in velocity
 			nVelocity = nNewVelocity;
 			// Change timer
 			nVelocityTimer = 0xFFFF;
 			nVelocityTimer /= nVelocity;
-			nVelocityTimer = -nVelocityTimer;
+			nVelocityTimer = 0-nVelocityTimer;
 			SetTimerCount(nVelocityTimer);
 		}
 		if ( nRunTime == 0 && nRunTimeFraction != 0 )

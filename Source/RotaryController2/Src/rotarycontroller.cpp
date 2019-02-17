@@ -64,7 +64,7 @@ struct Eeprom
 			uint32_t Segments[MAX_SEGMENTS];		
 			Units not_used;//SequencesUnits;					// step or degrees - always degrees
 			Units LastUnits;						// "last units" - degrees, steps?
-			uint32_t ContinuousSpeed;				// last continuous speed
+			int32_t ContinuousSpeed;				// last continuous speed
 		} DeviceConfig[MAX_DEVICES];
 	
 	} Config;
@@ -268,7 +268,7 @@ void RotaryController::DisplaySetupValue(uint8_t col, uint8_t row, MenuItem &ite
 		case UINT32:
 		{
 			char buf[20];
-			snprintf(buf, sizeof(buf) - 1, "%u", *((uint32_t *)(item.memAddr)));
+			snprintf(buf, sizeof(buf) - 1, "%lu", *((uint32_t *)(item.memAddr)));
 			display.Text(col, row, buf);
 			break;
 		}
@@ -323,7 +323,7 @@ bool RotaryController::EditInt32( int32_t *n, uint8_t col, uint8_t row, int32_t 
 			{
 				buzzer.Beep();
 				char msg[21];
-				snprintf( msg, sizeof(msg), "Must be from %u-%u", min, max );
+				snprintf( msg, sizeof(msg), "Must be from %lu-%lu", min, max );
 				display.Text(0, 3, msg);
 				display.Update();
 				display.SetCursorPos(col+nDigit, row);
@@ -538,7 +538,6 @@ bool RotaryController::EditEnum(uint32_t *n, const int row, uint32_t min, uint32
 	
 	for (;;)
 	{
-		uint8_t nValue;
 		int key = DoKeyScanEtc();
 		if (key == Keys::KEY_NONE)
 			continue;
@@ -683,6 +682,14 @@ void RotaryController::DisplayCoordinates()
 
 	MakeDegrees(buf, sizeof(buf), nDestination);
 	display.Text(13, 3, buf);
+	
+	switch (motion.eState)
+	{
+		case Motion::eAccelerating: display.Text(18, 0, 'a'); break;
+		case Motion::eRunning:display.Text(18, 0, 'r'); break;
+		case Motion::eDecelerating:display.Text(18, 0, 'd'); break;
+		case Motion::eStopped:display.Text(18, 0, 's'); break;
+	}
 }
 
 bool RotaryController::DrawJog(bool block)
@@ -806,41 +813,35 @@ void RotaryController::DoJog()
 		if (key == (Keys::KEY_MODE_PRESSED))
 			break;
 		
-		else if (LeftRightKeyValue(key, nMoveValue))
+		else if (LeftRightKeyValue(key, nMoveValue) )// && motion.eState == Motion::eStopped )	// for now, only jog if we aren't moving - need to fix UpdateMotorTravel() to support change in position when already moving.
 		{
 			SetRunButton(true);
 			Jog(nMoveValue);
 		}
-		else if (key == Keys::KEY_ZERO_PRESSED)
+		else if (key == Keys::KEY_ZERO_PRESSED && motion.eState == Motion::eStopped)
 		{
-			if (motion.eState == Motion::eStopped)
-			{
-				motion.ResetMotorCounters();
-				redrawDisplay = true;
-			}
+			motion.ResetMotorCounters();
+			redrawDisplay = true;
 		}
-		else if (key == Keys::KEY_SPEED_PRESSED)
+		else if (key == Keys::KEY_SPEED_PRESSED && motion.eState == Motion::eStopped)
 		{
 			ToggleSpeed();
 			redrawDisplay = true;
 		}		
-		else if (key == Keys::KEY_UNITS_PRESSED)
+		else if (key == Keys::KEY_UNITS_PRESSED && motion.eState == Motion::eStopped)
 		{
 			ToggleUnits();
 			redrawDisplay = true;
 		}		
-		else if (key == Keys::KEY_GOTO_PRESSED)
+		else if (key == Keys::KEY_GOTO_PRESSED && motion.eState == Motion::eStopped)
 		{
 			DoGoto(1);
 			redrawDisplay = true;
 		}
-		else if (key == Keys::KEY_STOP_PRESSED)
+		else if (key == Keys::KEY_STOP_PRESSED && motion.eState != Motion::eStopped)
 		{
-			if ( motion.eState != Motion::eStopped )
-			{
-				motion.MotorStop();
-				redrawDisplay = true;
-			}
+			motion.MotorStop();
+			redrawDisplay = true;
 		}
 		
 		
@@ -861,7 +862,7 @@ bool RotaryController::DrawDivisions(bool block)
 	ShowRotateSpeed();
 	
 	char buf[21];
-	snprintf(buf, sizeof(buf), "Division: %d/%d", division+1, divisions);
+	snprintf(buf, sizeof(buf), "Division: %ld/%ld", division+1, divisions);
 	display.Text(0, 1, buf);
 	
 	DisplayCoordinates();
@@ -883,7 +884,6 @@ void RotaryController::DoDivisions()
 	divisions = eeprom.Config.DeviceConfig[activeDevice].Divisions;
 	for (;;)
 	{
-		int32_t nMoveValue;
 		if ( HAL_GetTick() > next_redraw )
 		{
 			if (redrawDisplay)
@@ -954,13 +954,10 @@ void RotaryController::DoDivisions()
 			ToggleSpeed();
 			redrawDisplay = true;
 		}		
-		else if (key == Keys::KEY_STOP_PRESSED)
+		else if (key == Keys::KEY_STOP_PRESSED && motion.eState != Motion::eStopped )
 		{
-			if ( motion.eState != Motion::eStopped )
-			{
-				motion.MotorStop();
-				redrawDisplay = true;
-			}
+			motion.MotorStop();
+			redrawDisplay = true;
 		}
 		
 		if (move)
@@ -1010,7 +1007,7 @@ bool RotaryController::DrawContinous(bool block)
 	if (movementUnits == Units::Steps)
 	{
 		char buf[21];
-		snprintf(buf, sizeof(buf), "Speed: %d steps/s", continuousSpeed);
+		snprintf(buf, sizeof(buf), "Speed: %ld steps/s", continuousSpeed);
 		display.Text(0, 1, buf);
 	}
 	else
@@ -1108,7 +1105,7 @@ void RotaryController::DoContinuous( void )
 		{
 			ToggleSpeed();
 			maxSpeed = isSlowSpeed ? eeprom.Config.DeviceConfig[activeDevice].SlowVelocityMax : eeprom.Config.DeviceConfig[activeDevice].FastVelocityMax;
-			if (abs(continuousSpeed) > maxSpeed)
+			if ((uint32_t)abs(continuousSpeed) > maxSpeed)
 			{
 				continuousSpeed = sign(continuousSpeed) * maxSpeed;
 				motion.SetContinuousSpeed(continuousSpeed);
@@ -1146,9 +1143,9 @@ bool RotaryController::DrawSegment(uint32_t segment, uint32_t segments, uint32_t
 	ShowRotateSpeed();
 	
 	char buf[21];
-	snprintf(buf,sizeof(buf),"Seg: %d/%d", segment+1, segments);
+	snprintf(buf,sizeof(buf),"Seg: %lu/%lu", segment+1, segments);
 	display.Text(0,1,buf);
-	snprintf(buf,sizeof(buf),"Rpt: %d", segmentRepeats+1);
+	snprintf(buf,sizeof(buf),"Rpt: %lu", segmentRepeats+1);
 	display.Text(10,1,buf);
 	DisplayCoordinates();
 
@@ -1430,8 +1427,8 @@ void RotaryController::Run()
 	SetBacklight(EBacklight::Green);
 	while (true)
 	{
-		static uint32_t last_tick = 0;
-		uint32_t tick = HAL_GetTick();
+//		static uint32_t last_tick = 0;
+//		uint32_t tick = HAL_GetTick();
 		
 		switch (mode)
 		{

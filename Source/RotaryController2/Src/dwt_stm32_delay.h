@@ -1,6 +1,7 @@
 // From https://community.st.com/s/question/0D50X00009XkeRYSAZ/delay-in-us
 
-#pragma once
+#ifndef __DWT_STM32_DELAY_H__
+#define __DWT_STM32_DELAY_H__
 
 #include "stm32f1xx_hal.h"
 /**
@@ -24,3 +25,4 @@ __STATIC_INLINE void DWT_Delay_us(volatile uint32_t microseconds)
 	while ((DWT->CYCCNT - clk_cycle_start) < microseconds) ;
 }
  
+#endif
