@@ -246,58 +246,68 @@ public:
 				// v = a t + u
 
 				// x = 1/2 a t2 + u t
-				uint32_t decelerateDistanceFromV0 = nAcceleration * (nDecTime) * (nDecTime) / 2;
+				uint32_t timeDecelerate = nVelocity / nPathAcceleration;
+				uint32_t decelerateDistanceFromV0 = nVelocity * timeDecelerate / 2 + (timeDecelerate * nPathAcceleration / 2);	// don't divide distances
 				if (decelerateDistanceFromV0 >= distanceToMove)
 				{
 					// decelerating now, will get us to the new position.
 					// Compute new deceleration settings
-					distanceToMove = distanceToMove + 0;
-				}
-				else if (currentState == Motion::eRunning)
-				{
-					// We are at Vmax.  Coast, then decelerate
-					uint32_t additionalRunDistance = distanceToMove - decelerateDistanceFromV0;
-					// Update runtime/runfraction
-					
-					// x = vt
-					nRunTime = additionalRunDistance / nVelocity;
-					nVelocityCounter = additionalRunDistance % nVelocity;
-					nRunTime++;
-					nRunTimeFraction = nVelocity/2;	// correct for integer decleration point?
-					eState = Motion::eRunning;
-					
-					// use existing deceleration settings
-					
+					nVelocityCounter += nPendingMoveDistance;
+
 					nMotorDestination += nPendingMoveDistance;
 				}
+				//else if (currentState == Motion::eRunning)
+				//{
+				//	// We are at Vmax.  Coast, then decelerate
+				//	uint32_t additionalRunDistance = distanceToMove - decelerateDistanceFromV0;
+				//	// Update runtime/runfraction
+				//	
+				//	// x = vt
+				//	nRunTime = additionalRunDistance / nVelocity+1;
+				//	nVelocityCounter = additionalRunDistance % nVelocity;
+				//	nRunTimeFraction = 0;
+				//	eState = Motion::eRunning;
+				//	
+				//	// use existing deceleration settings
+				//	
+				//	nMotorDestination += nPendingMoveDistance;
+				//}
 				else
 				{
 					// Else, accelerate from V0, optional coast, decelerate.  Similar to below, but not symetrical V0 != Vf
 					int32_t timeDecelerate = nMaxVelocity / nAcceleration;
-					uint32_t distanceDecelerate = nMaxVelocity * timeDecelerate / 2;	// don't divide distances
+					uint32_t distanceDecelerate = nMaxVelocity * timeDecelerate / 2 + (timeDecelerate * nAcceleration / 2);	// don't divide distances
 					int32_t timeAccelerate = (nMaxVelocity - nVelocity) / nAcceleration;
-					uint32_t distanceAccelerateFromV0 = nVelocity * timeAccelerate + (nMaxVelocity - nVelocity) * timeAccelerate / 2;	// don't divide distances
+					uint32_t distanceAccelerateFromV0 = nVelocity * timeAccelerate + (nMaxVelocity - nVelocity) * timeAccelerate / 2 - (timeAccelerate * nAcceleration / 2);	// don't divide distances
 					if (distanceAccelerateFromV0 + distanceDecelerate <= distanceToMove)
 					{
 						// we can accelerate to Vmax
-						nPathAcceleration = nAcceleration;
-						int nPeakVelocity = nVelocity + timeAccelerate * nPathAcceleration;
+//						nPathAcceleration = nAcceleration;
+						int nPeakVelocity = nVelocity + timeAccelerate * nAcceleration;
 						
-						distanceAccelerateFromV0 = nVelocity * timeAccelerate + (nPeakVelocity - nVelocity) * timeAccelerate / 2;	// don't divide distances
+						distanceAccelerateFromV0 = nVelocity * timeAccelerate + (nPeakVelocity - nVelocity) * timeAccelerate / 2 - (timeAccelerate * nAcceleration / 2);	// don't divide distances
 						
 						timeDecelerate = nPeakVelocity / nPathAcceleration;
-						distanceDecelerate = nPeakVelocity * timeDecelerate / 2;	// don't divide distances
+						distanceDecelerate = nPeakVelocity * timeDecelerate / 2 + (timeDecelerate * nAcceleration / 2);	// don't divide distances
 
 						nAccTime = timeAccelerate;
 						nDecTime = timeDecelerate;
-						uint32_t runDistance = distanceToMove - distanceAccelerateFromV0 - distanceDecelerate - nVelocity/2;
+						uint32_t runDistance = distanceToMove - distanceAccelerateFromV0 - distanceDecelerate;
 						nRunTime = runDistance / nPeakVelocity;
 						nRunTimeFraction = runDistance % nPeakVelocity;
 						if (nRunTimeFraction != 0)
 							nRunTime++;
-						eState = Motion::eAccelerating;
+						if (nAccTime > 0)
+						{
+							eState = Motion::eAccelerating;
+							nVelocityCounter = nVelocity;
+						}
+						else
+						{
+							eState = Motion::eRunning;
+							nVelocityCounter = nVelocity;
+						}
 						nMotorDestination += nPendingMoveDistance;
-						nVelocityCounter = nVelocity;
 					}
 					else
 					{
@@ -306,32 +316,48 @@ public:
 						uint32_t n = (2*nAcceleration*distanceToMove + nVelocity * nVelocity) / 2;
 						uint32_t targetVelocity = isqrt32(n);
 						
-						nPathAcceleration = nAcceleration;
+//						nPathAcceleration = nAcceleration;
 						timeAccelerate = (targetVelocity - nVelocity) / nAcceleration;
 						if (timeAccelerate < 0)
 							timeAccelerate = 0;
 						
 						int nPeakVelocity = nVelocity + timeAccelerate * nPathAcceleration;
-						distanceAccelerateFromV0 = nVelocity * timeAccelerate + (nPeakVelocity - nVelocity) * timeAccelerate / 2;	// don't divide distances
+						distanceAccelerateFromV0 = nVelocity * timeAccelerate + (nPeakVelocity - nVelocity) * timeAccelerate / 2 - (timeAccelerate * nPathAcceleration / 2);	// don't divide distances
 						
 						timeDecelerate = nPeakVelocity / nPathAcceleration;
-						distanceDecelerate = nPeakVelocity * timeDecelerate / 2;	// don't divide distances
+						distanceDecelerate = nPeakVelocity * timeDecelerate / 2 + (timeDecelerate * nPathAcceleration / 2);	// don't divide distances
 						
 						nAccTime = timeAccelerate;
 						nDecTime = timeDecelerate;
-						uint32_t runDistance = distanceToMove - distanceAccelerateFromV0 - distanceDecelerate - nVelocity/2;
+						uint32_t runDistance = distanceToMove - distanceAccelerateFromV0 - distanceDecelerate;
 						nRunTime = runDistance / nPeakVelocity;
 						nRunTimeFraction = runDistance % nPeakVelocity;
 						if (nRunTimeFraction != 0)
 							nRunTime++;
-						if ( nAccTime > 0 )
+						if (nAccTime > 0)
+						{
 							eState = Motion::eAccelerating;
-						else if ( nRunTime > 0 )
+							nVelocityCounter = nVelocity;
+						}
+						else if (nRunTime > 0)
+						{
 							eState = Motion::eRunning;
+							if (nRunTime == 1)
+							{
+								nVelocityCounter = nRunTimeFraction;
+								nRunTimeFraction = 0;
+							}
+							else
+							{
+								nVelocityCounter = nVelocity;
+							}
+						}
 						else
+						{
 							eState = Motion::eDecelerating;
+							nVelocityCounter = nVelocity;
+						}
 						nMotorDestination += nPendingMoveDistance;
-						nVelocityCounter = nVelocity;
 					}
 				}
 
