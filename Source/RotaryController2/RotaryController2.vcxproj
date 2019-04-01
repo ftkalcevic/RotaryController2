@@ -101,6 +101,7 @@
     <ClInclude Include="Src\display_vfd_M0420SD.h" />
     <ClInclude Include="Src\dwt_stm32_delay.h" />
     <ClInclude Include="Src\keys.h" />
+    <ClInclude Include="Src\motion.h" />
     <ClInclude Include="Src\rotarycontroller.h" />
     <None Include="stm32.props" />
     <ClCompile Include="$(BSP_ROOT)\STM32F1xxxx\StartupFiles\startup_stm32f103xb.c" />

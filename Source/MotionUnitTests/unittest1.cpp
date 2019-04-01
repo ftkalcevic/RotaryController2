@@ -59,7 +59,7 @@ public:
 				break;
 			if (!timerInterruptEnabled)
 				break;
-			//Assert::IsTrue(motion.MotorPosition() <= (int32_t)maxMotorPosition*2, L"Well exceeded target position");
+			Assert::IsTrue(motion.MotorPosition() <= (int32_t)maxMotorPosition*2, L"Well exceeded target position");
 			Assert::IsTrue(motion.MotorPosition() != lastPos, L"No movement between interrupts");
 
 			extraTests(motion);
@@ -372,6 +372,122 @@ public:
 		});
 
 		Assert::IsTrue(motion.MotorPosition() == stepsToMove + additionalSteps, L"Final position wrong");
+	}
+
+	TEST_METHOD(TestMoveLongThenOppositeDirection)
+	{
+		uint32_t backlash = 0;
+		uint32_t stepsPerRevolution = 2000;
+		uint32_t gearRatio = 90;
+		uint32_t maxVelocity = 2000;
+		uint32_t maxAcceleration = 2000;
+
+		Motion motion(NULL);
+		motion.SetMotorConfig(backlash, stepsPerRevolution, gearRatio, maxVelocity, maxAcceleration);
+
+		int32_t stepsToMove = 100;
+		int32_t additionalSteps = -10;
+		motion.MoveSteps(stepsToMove);
+		motion.UpdateMotorTravel();
+
+		bool bExtraStep = false;
+		DoMotion(motion, stepsToMove + additionalSteps, [additionalSteps](Motion &motion) {
+			if (motion.MotorPosition() == 70)
+			{
+				motion.MoveSteps(additionalSteps);
+				motion.UpdateMotorTravel();
+			}
+		});
+
+		Assert::IsTrue(motion.MotorPosition() == stepsToMove /* + additionalSteps */, L"Final position wrong");
+	}
+
+	TEST_METHOD(TestContinuous)
+	{
+		uint32_t backlash = 0;
+		uint32_t stepsPerRevolution = 2000;
+		uint32_t gearRatio = 90;
+		uint32_t maxVelocity = 2000;
+		uint32_t maxAcceleration = 2000;
+
+		Motion motion(NULL);
+		motion.SetMotorConfig(backlash, stepsPerRevolution, gearRatio, maxVelocity, maxAcceleration);
+
+		int32_t speed = 1000;
+		motion.SetContinuousSpeed(speed);
+
+		bool bExtraStep = false;
+		DoMotion(motion, 99999, [speed](Motion &motion) {
+			if (motion.MotorPosition() == 5000)
+			{
+				motion.MotorStop();
+			}
+		});
+
+		Assert::IsTrue(motion.MotorPosition() == 5264, L"Final position wrong");
+	}
+
+
+	TEST_METHOD(TestContinuousSlowDown)
+	{
+		uint32_t backlash = 0;
+		uint32_t stepsPerRevolution = 2000;
+		uint32_t gearRatio = 90;
+		uint32_t maxVelocity = 2000;
+		uint32_t maxAcceleration = 2000;
+
+		Motion motion(NULL);
+		motion.SetMotorConfig(backlash, stepsPerRevolution, gearRatio, maxVelocity, maxAcceleration);
+
+		int32_t speed = 2000;
+		motion.SetContinuousSpeed(speed);
+
+		bool bExtraStep = false;
+		DoMotion(motion, 99999, [speed](Motion &motion) {
+			if (motion.MotorPosition() == 5000)
+			{
+				motion.SetContinuousSpeed(1990);
+			}
+			else if (motion.MotorPosition() == 9000)
+			{
+				motion.MotorStop();
+			}		
+		});
+
+		Assert::IsTrue(motion.MotorPosition() == 10035, L"Final position wrong");
+	}
+
+	TEST_METHOD(TestContinuousSlowDownWhileDecelerating)
+	{
+		uint32_t backlash = 0;
+		uint32_t stepsPerRevolution = 2000;
+		uint32_t gearRatio = 90;
+		uint32_t maxVelocity = 2000;
+		uint32_t maxAcceleration = 2000;
+
+		Motion motion(NULL);
+		motion.SetMotorConfig(backlash, stepsPerRevolution, gearRatio, maxVelocity, maxAcceleration);
+
+		int32_t speed = 2000;
+		motion.SetContinuousSpeed(speed);
+
+		bool bExtraStep = false;
+		DoMotion(motion, 99999, [speed](Motion &motion) {
+			if (motion.MotorPosition() == 5000)
+			{
+				motion.SetContinuousSpeed(1900);
+			}
+			else if (motion.MotorPosition() == 5010)
+			{
+				motion.SetContinuousSpeed(1800);
+			}
+			else if (motion.MotorPosition() == 9000)
+			{
+				motion.MotorStop();
+			}
+		});
+
+		Assert::IsTrue(motion.MotorPosition() == 10035, L"Final position wrong");
 	}
 
 };

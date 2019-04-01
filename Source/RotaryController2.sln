@@ -8,13 +8,21 @@ EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|VisualGDB = Debug|VisualGDB
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		Release|VisualGDB = Release|VisualGDB
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Debug|VisualGDB.ActiveCfg = Debug|VisualGDB
 		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Debug|VisualGDB.Build.0 = Debug|VisualGDB
+		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Debug|x64.ActiveCfg = Debug|VisualGDB
+		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Debug|x86.ActiveCfg = Debug|VisualGDB
 		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Release|VisualGDB.ActiveCfg = Release|VisualGDB
 		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Release|VisualGDB.Build.0 = Release|VisualGDB
+		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Release|x64.ActiveCfg = Release|VisualGDB
+		{380F997F-5F41-487D-9630-5B5B89FD70D3}.Release|x86.ActiveCfg = Release|VisualGDB
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

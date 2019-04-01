@@ -45,6 +45,7 @@ private:
 	uint16_t nLastEncoderPosition;
 	uint32_t synchronousRatio;
 	int32_t synchronousPosition;
+	bool timerInterruptEnabled;
 	
 	// Config items
 	uint32_t nBacklash;
@@ -86,6 +87,7 @@ public:
 		nPendingDestination = 0;
 		bPendingDestination = false;
 		eState = eStopped;
+		timerInterruptEnabled = false;
 		ResetMotorCounters();
 	}
 
@@ -229,6 +231,11 @@ public:
 		{
 			if ( eState != Motion::eStopped ) // Are we moving?
 			{
+				// this is still too buggy.
+				nPendingMoveDistance=0;
+				bPendingDestination = false;
+				return;
+				
 				// Don't interrupt while we calculate this.
 				__disable_irq();
 				
@@ -252,9 +259,15 @@ public:
 				{
 					// decelerating now, will get us to the new position.
 					// Compute new deceleration settings
-					nVelocityCounter += nPendingMoveDistance;
-
-					nMotorDestination += nPendingMoveDistance;
+					if (nPendingMoveDistance > nVelocityCounter)
+					{
+						// too hard for now.
+					}
+					else
+					{
+						nVelocityCounter += nPendingMoveDistance;
+						nMotorDestination += nPendingMoveDistance;
+					}
 				}
 				//else if (currentState == Motion::eRunning)
 				//{
@@ -362,6 +375,7 @@ public:
 				}
 
 				__enable_irq();
+				EnableTimerInterrupt(true);
 				nPendingMoveDistance=0;
 				bPendingDestination = false;
 			}
@@ -617,7 +631,7 @@ public:
 					nPathAcceleration = (nVelocity - targetContinuousSpeed);
 				if (nPathAcceleration == 0)
 					nPathAcceleration = 1;
-				nDecTime = (nVelocity - targetContinuousSpeed) / nAcceleration;
+				nDecTime = (nVelocity - targetContinuousSpeed) / nPathAcceleration;
 				eState = eDecelerating;
 			}
 		}
@@ -723,6 +737,7 @@ private:
 			__HAL_TIM_DISABLE_IT(htim, TIM_IT_UPDATE);
 			__HAL_TIM_DISABLE(htim);
 		}
+		timerInterruptEnabled = enable;
 	}
 
 	void SetTimerCount(uint16_t count)
