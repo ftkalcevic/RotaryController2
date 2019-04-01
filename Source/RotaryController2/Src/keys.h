@@ -43,21 +43,21 @@ public:
 	{
 		KEY_NONE    = 0,
 		KEY_1		= 0x00001,
-		KEY_2		= 0x00010,
-		KEY_3		= 0x00100,
-		KEY_4		= 0x01000,
-		KEY_5		= 0x00002,
+		KEY_2		= 0x00002,
+		KEY_3		= 0x00004,
+		KEY_4		= 0x00008,
+		KEY_5		= 0x00010,
 		KEY_6		= 0x00020,
-		KEY_7		= 0x00200,
-		KEY_8		= 0x02000,
-		KEY_9		= 0x00008,
-		KEY_10		= 0x00080,
-		KEY_11		= 0x00800,
-		KEY_12		= 0x08000,
-		KEY_13		= 0x00004,
-		KEY_14		= 0x00040,
-		KEY_15		= 0x00400,
-		KEY_16		= 0x04000,
+		KEY_7		= 0x00040,
+		KEY_8		= 0x00080,
+		KEY_9		= 0x00100,
+		KEY_10		= 0x00200,
+		KEY_11		= 0x00400,
+		KEY_12		= 0x00800,
+		KEY_13		= 0x01000,
+		KEY_14		= 0x02000,
+		KEY_15		= 0x04000,
+		KEY_16		= 0x08000,
 		KEY_STOP	= 0x10000,
 		KEY_PRESSED = 0x80000,
 		KEY_RELEASED= 0x00000,
@@ -182,6 +182,8 @@ public:
 		if(HAL_GPIO_ReadPin(GPIO_RUNBUTTON_GPIO_Port, GPIO_RUNBUTTON_Pin) == GPIO_PIN_RESET)	
 			keystate |= mask;
 		mask <<= 1;
+		
+		//if (keystate) { printf("mask=%08X\n", keystate); return ret;}
 		
 		// Debounce the press and release.
 		if(debounceCounter)

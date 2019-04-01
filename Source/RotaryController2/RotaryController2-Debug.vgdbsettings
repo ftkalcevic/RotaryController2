@@ -62,7 +62,7 @@
         <ExtraParameters>
           <Frequency xsi:nil="true" />
           <BoostedFrequency xsi:nil="true" />
-          <ConnectUnderReset>true</ConnectUnderReset>
+          <ConnectUnderReset>false</ConnectUnderReset>
         </ExtraParameters>
         <LoadProgressGUIThreshold>131072</LoadProgressGUIThreshold>
         <ProgramMode>Auto</ProgramMode>
@@ -70,7 +70,6 @@
           <string>set remotetimeout 60</string>
           <string>target remote :$$SYS:GDB_PORT$$</string>
           <string>mon halt</string>
-          <string>mon reset init</string>
           <string>load</string>
         </StartupCommands>
         <PreferredGDBPort>0</PreferredGDBPort>

@@ -40,7 +40,7 @@ PrefsVaultGUID=
 PrefsRevisionGUID=
 
 [Document1]
-DocumentPath=RotaryController2.SchDoc
+DocumentPath=VoltageDivider.SchDoc
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -54,10 +54,10 @@ ClassGenCCAutoRoomEnabled=1
 ClassGenNCAutoScope=None
 DItemRevisionGUID=
 GenerateClassCluster=0
-DocumentUniqueId=OVSYWVFS
+DocumentUniqueId=IUHAXXSD
 
 [Document2]
-DocumentPath=RotaryController2.CSPcbDoc
+DocumentPath=VoltageDivider.CSPcbDoc
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -71,75 +71,58 @@ ClassGenCCAutoRoomEnabled=1
 ClassGenNCAutoScope=None
 DItemRevisionGUID=
 GenerateClassCluster=0
-DocumentUniqueId=JWRFTHUV
-
-[Document3]
-DocumentPath=C:\Program Files (x86)\Altium Designer 6\Library\Texas Instruments\TI Logic Buffer Line Driver.IntLib
-AnnotationEnabled=1
-AnnotateStartValue=1
-AnnotationIndexControlEnabled=0
-AnnotateSuffix=
-AnnotateScope=All
-AnnotateOrder=-1
-DoLibraryUpdate=1
-DoDatabaseUpdate=1
-ClassGenCCAutoEnabled=1
-ClassGenCCAutoRoomEnabled=1
-ClassGenNCAutoScope=None
-DItemRevisionGUID=
-GenerateClassCluster=0
-DocumentUniqueId=
+DocumentUniqueId=RJADINTQ
 
 [GeneratedDocument1]
-DocumentPath=Outputs\RotaryController2.DRR
+DocumentPath=Outputs\VoltageDivider.DRR
 DItemRevisionGUID=
 
 [GeneratedDocument2]
-DocumentPath=Outputs\RotaryController2.EXTREP
+DocumentPath=Outputs\VoltageDivider.EXTREP
 DItemRevisionGUID=
 
 [GeneratedDocument3]
-DocumentPath=Outputs\RotaryController2.GBL
+DocumentPath=Outputs\VoltageDivider.GBL
 DItemRevisionGUID=
 
 [GeneratedDocument4]
-DocumentPath=Outputs\RotaryController2.GBO
+DocumentPath=Outputs\VoltageDivider.GBO
 DItemRevisionGUID=
 
 [GeneratedDocument5]
-DocumentPath=Outputs\RotaryController2.GBS
+DocumentPath=Outputs\VoltageDivider.GBS
 DItemRevisionGUID=
 
 [GeneratedDocument6]
-DocumentPath=Outputs\RotaryController2.GTL
+DocumentPath=Outputs\VoltageDivider.GTL
 DItemRevisionGUID=
 
 [GeneratedDocument7]
-DocumentPath=Outputs\RotaryController2.GTO
+DocumentPath=Outputs\VoltageDivider.GTO
 DItemRevisionGUID=
 
 [GeneratedDocument8]
-DocumentPath=Outputs\RotaryController2.GTS
+DocumentPath=Outputs\VoltageDivider.GTS
 DItemRevisionGUID=
 
 [GeneratedDocument9]
-DocumentPath=Outputs\RotaryController2.LDP
+DocumentPath=Outputs\VoltageDivider.LDP
 DItemRevisionGUID=
 
 [GeneratedDocument10]
-DocumentPath=Outputs\RotaryController2.Outline
+DocumentPath=Outputs\VoltageDivider.Outline
 DItemRevisionGUID=
 
 [GeneratedDocument11]
-DocumentPath=Outputs\RotaryController2.REP
+DocumentPath=Outputs\VoltageDivider.REP
 DItemRevisionGUID=
 
 [GeneratedDocument12]
-DocumentPath=Outputs\RotaryController2.RUL
+DocumentPath=Outputs\VoltageDivider.RUL
 DItemRevisionGUID=
 
 [GeneratedDocument13]
-DocumentPath=Outputs\RotaryController2.TXT
+DocumentPath=Outputs\VoltageDivider.TXT
 DItemRevisionGUID=
 
 [Configuration1]
@@ -314,8 +297,6 @@ OutputName8=ODB++ Files
 OutputDocumentPath8=
 OutputVariantName8=[No Variations]
 OutputDefault8=0
-Configuration8_Name1=OutputConfigurationParameter1
-Configuration8_Item1=AddToAllLayerClasses.Set= |AddToAllPlots_3D Bottom=False|AddToAllPlots_3D Top=False|AddToAllPlots_Assembly Bottom=False|AddToAllPlots_Assembly Text Bottom=False|AddToAllPlots_Assembly Text Top=False|AddToAllPlots_Assembly Top=False|AddToAllPlots_Courtyard Bottom=False|AddToAllPlots_Courtyard Top=False|AddToAllPlots_Dimensions=False|AddToAllPlots_Dimensions Bottom=False|AddToAllPlots_Dimensions Top=False|AddToAllPlots_Mechanical 10=False|AddToAllPlots_Mechanical 3=False|AddToAllPlots_Mechanical 4=False|AddToAllPlots_Mechanical 5=False|AddToAllPlots_Outline=False|ExportPositivePlaneLayers=False|GenerateDRCRulesFile=False|IncludeUnconnectedMidLayerPads=False|LayerClassesPlot.Set= |ObjsInsideBoardOutlineOnly=False|ODBProfileLayer=-1000|Plot_V7_1=True|Plot_V7_1_name=Test Points Top|Plot_V7_2=True|Plot_V7_2_name=Test Points Bottom|PlotBottomLayerPlot=True|PlotBottomOverlayPlot=True|PlotBottomPastePlot=True|PlotBottomSolderPlot=True|PlotInternalPlane10Plot=False|PlotInternalPlane11Plot=False|PlotInternalPlane12Plot=False|PlotInternalPlane13Plot=False|PlotInternalPlane14Plot=False|PlotInternalPlane15Plot=False|PlotInternalPlane16Plot=False|PlotInternalPlane1Plot=False|PlotInternalPlane2Plot=False|PlotInternalPlane3Plot=False|PlotInternalPlane4Plot=False|PlotInternalPlane5Plot=False|PlotInternalPlane6Plot=False|PlotInternalPlane7Plot=False|PlotInternalPlane8Plot=False|PlotInternalPlane9Plot=False|PlotKeepOutLayerPlot=True|PlotMechanical10Plot=False|PlotMechanical11Plot=True|PlotMechanical12Plot=True|PlotMechanical13Plot=True|PlotMechanical14Plot=True|PlotMechanical15Plot=True|PlotMechanical16Plot=True|PlotMechanical1Plot=True|PlotMechanical2Plot=False|PlotMechanical3Plot=False|PlotMechanical4Plot=False|PlotMechanical5Plot=False|PlotMechanical6Plot=True|PlotMechanical7Plot=True|PlotMechanical8Plot=True|PlotMechanical9Plot=True|PlotMidLayer10Plot=False|PlotMidLayer11Plot=False|PlotMidLayer12Plot=False|PlotMidLayer13Plot=False|PlotMidLayer14Plot=False|PlotMidLayer15Plot=False|PlotMidLayer16Plot=False|PlotMidLayer17Plot=False|PlotMidLayer18Plot=False|PlotMidLayer19Plot=False|PlotMidLayer1Plot=False|PlotMidLayer20Plot=False|PlotMidLayer21Plot=False|PlotMidLayer22Plot=False|PlotMidLayer23Plot=False|PlotMidLayer24Plot=False|PlotMidLayer25Plot=False|PlotMidLayer26Plot=False|PlotMidLayer27Plot=False|PlotMidLayer28Plot=False|PlotMidLayer29Plot=False|PlotMidLayer2Plot=False|PlotMidLayer30Plot=False|PlotMidLayer3Plot=False|PlotMidLayer4Plot=False|PlotMidLayer5Plot=False|PlotMidLayer6Plot=False|PlotMidLayer7Plot=False|PlotMidLayer8Plot=False|PlotMidLayer9Plot=False|PlotTopLayerPlot=True|PlotTopOverlayPlot=True|PlotTopPastePlot=True|PlotTopSolderPlot=True|Record=ODBView
 OutputType9=Gerber
 OutputName9=Gerber Files
 OutputDocumentPath9=

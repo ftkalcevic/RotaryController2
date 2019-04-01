@@ -1386,6 +1386,21 @@ void RotaryController::DoSynchronised()
 }
 uint32_t RotaryController::DoKeyScanEtc()
 {
+//	static uint32_t next_tick = 0;
+//	if (HAL_GetTick() >= next_tick)
+//	{
+//		HAL_GPIO_TogglePin(GPIO_LED_ONBOARD_GPIO_Port, GPIO_LED_ONBOARD_Pin);
+//		next_tick = HAL_GetTick() + 500;
+//			
+//		static int n = 0;
+//		n++;
+//		SetBacklight((EBacklight)(n % 3));
+//		//buzzer.Buzz(15);
+//		static bool on = false;
+//		SetRunButton(on);
+//		on = !on;
+//	}
+
 	buzzer.Update();	
 	uint32_t k = keys.ScanKeys();
 	if (k & Keys::KEY_PRESSED)
@@ -1483,20 +1498,6 @@ void RotaryController::Run()
 //			display.Update();
 //		}
 //		
-//		static uint32_t next_tick = 0;
-//		if (tick >= next_tick)
-//		{
-//			HAL_GPIO_TogglePin(GPIO_LED_ONBOARD_GPIO_Port, GPIO_LED_ONBOARD_Pin);
-//			next_tick = tick + 500;
-//			
-//			static int n = 0;
-//			n++;
-//			SetBacklight((EBacklight)(n % 3));
-//			//buzzer.Buzz(15);
-//			static bool on = false;
-//			SetRunButton(on);
-//			on = !on;
-//		}
 //		
 //		if (tick == 300)
 //		{
