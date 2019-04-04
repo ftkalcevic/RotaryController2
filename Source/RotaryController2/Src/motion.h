@@ -4,6 +4,7 @@
 #include "dwt_stm32_delay.h"
 
 #define STEP_PULSE_HIGH_US 4
+#define MISSED_STEP_COUNT	20	// 200 step motor, 10 microsteps.  1 missed step 10 +/- 5.  
 
 class MotionTests;
 
@@ -34,24 +35,32 @@ private:
 	uint32_t nVelocityCounter;
 	uint8_t interrupt_tick;
 	bool bMotorClockwise;
-	bool bPositiveMove;
 	volatile int32_t nMotorPosition;
 	bool bPendingDestination;
 	int32_t nPendingDestination;
 	int32_t nPendingMoveDistance;
 	int32_t nMotorDestination;
+	uint16_t last_encoder_position;
+	volatile int32_t nEncoderPosition;
 	TIM_HandleTypeDef *htim;
+	TIM_HandleTypeDef *hEnc;
 	uint32_t targetContinuousSpeed;
-	uint16_t nLastEncoderPosition;
+	uint16_t nLastSpindleEncoderPosition;
 	uint32_t synchronousRatio;
 	int32_t synchronousPosition;
 	bool timerInterruptEnabled;
+	uint8_t encoderOutLast;
+	volatile bool bEncoderError;
 	
 	// Config items
 	uint32_t nBacklash;
-	uint32_t nTicksPerRotation;
+	int32_t nTicksPerRotation;
 	uint32_t nMaxVelocity;
 	uint32_t nAcceleration;
+	int32_t nEncoderTicksPerRevolution;
+	bool bEncoderReverse;
+	bool bMotorReverse;
+
 	
 	uint32_t isqrt32(uint32_t n) 
 	{ 
@@ -75,9 +84,39 @@ private:
 			g |= c; 
 		 } 
 	}
+
+	void UpdateEncoderPosition()
+	{
+		if(nEncoderTicksPerRevolution)
+		{
+			uint16_t current_encoder_position = __HAL_TIM_GET_COUNTER(hEnc);
+			int16_t diff = last_encoder_position - current_encoder_position;
+			if ( bEncoderReverse )
+				nEncoderPosition -= diff;
+			else
+				nEncoderPosition += diff;
+			
+			if (nEncoderPosition > nEncoderTicksPerRevolution)
+				nEncoderPosition -= nEncoderTicksPerRevolution;
+			else if (nEncoderPosition < 0)
+				nEncoderPosition += nEncoderTicksPerRevolution;
+			
+			if (!bEncoderError)
+			{
+				// todo - divide will be slow 
+				int32_t encoder_steps = nEncoderPosition * nTicksPerRotation / nEncoderTicksPerRevolution;
+				int32_t error = abs(encoder_steps - nMotorPosition);
+				if (error > nTicksPerRotation / 2)
+					error -= nTicksPerRotation;
+				if (abs(error) > MISSED_STEP_COUNT)
+					bEncoderError = true;
+			}
+			last_encoder_position = current_encoder_position;
+		}
+	}
 	
 public:
-	Motion(TIM_HandleTypeDef *htimer) : htim(htimer)
+	Motion(TIM_HandleTypeDef *htimer, TIM_HandleTypeDef *hencoder) : htim(htimer), hEnc(hencoder)
 	{
 		SetMotorEnable(false);
 		bContinuousMode = false;
@@ -88,15 +127,19 @@ public:
 		bPendingDestination = false;
 		eState = eStopped;
 		timerInterruptEnabled = false;
+		encoderOutLast = 0;
 		ResetMotorCounters();
 	}
 
-	void SetMotorConfig(uint32_t backlash, uint32_t stepsPerRevolution, uint32_t gearRatio, uint32_t maxVelocity, uint32_t acceleration)
+	void SetMotorConfig(uint32_t backlash, uint32_t stepsPerRevolution, uint32_t gearRatio, bool motorReverse, uint32_t encoderStepsPerRevolution, bool encoderReverse, uint32_t maxVelocity, uint32_t acceleration)
 	{
 		nBacklash = backlash;
 		nTicksPerRotation = stepsPerRevolution * gearRatio;
+		bMotorReverse = motorReverse;
 		nMaxVelocity = MakeRawSpeed(maxVelocity);
 		nAcceleration = MakeRawAcceleration(acceleration);
+		nEncoderTicksPerRevolution = encoderStepsPerRevolution * gearRatio;
+		bEncoderReverse = encoderReverse;
 	}
 
 	void ResetMotorCounters(void)
@@ -106,7 +149,14 @@ public:
 		nMotorDestination = 0;
 		nPendingMoveDistance = 0;
 		interrupt_tick = 0;
+		nEncoderPosition = 0;
+		bEncoderError = false;
 		__enable_irq();
+	}
+	
+	bool EncoderError()
+	{
+		return bEncoderError;
 	}
 
 	// timer interrupt.  It takes 2 interrupts to complete 1 cycle.
@@ -143,8 +193,11 @@ public:
 				nMotorPosition += (long)nTicksPerRotation;
 		}
 
+		// Check actual position
+		UpdateEncoderPosition();
+			
 		// Update AB output
-		OutputQuadrature(nMotorPosition);
+		OutputQuadrature(bMotorClockwise);
 
 		if (bSynchronousMotion)
 		{
@@ -240,7 +293,7 @@ public:
 				__disable_irq();
 				
 				// if we are updating half way through a cycle, force complete the cycle
-				ESTATE currentState = eState;
+				//ESTATE currentState = eState;
 				if (interrupt_tick & 1)
 				{
 					TimerInterruptHandler();
@@ -477,8 +530,10 @@ public:
 					else
 						nMotorPosition--;
 
+					UpdateEncoderPosition();
+					
 					// Update AB output
-					OutputQuadrature(nMotorPosition);
+					OutputQuadrature(bMotorClockwise);
 					return;
 				}
 
@@ -557,6 +612,14 @@ public:
 		return nMotorDestination;
 	}
 
+	int32_t EncoderPosition()
+	{
+		__disable_irq();
+		uint32_t n = nEncoderPosition;
+		__enable_irq();
+		return n;
+	}
+	
 	void MotorStop()
 	{
 		if (bSynchronousMotion)
@@ -642,10 +705,10 @@ public:
 		if (bSynchronousMotion)
 		{
 			uint16_t encoderPosition = __HAL_TIM_GET_COUNTER(&htim2);
-			int16_t encoderDelta = encoderPosition - nLastEncoderPosition;
+			int16_t encoderDelta = encoderPosition - nLastSpindleEncoderPosition;
 			if (encoderDelta != 0)
 			{
-				nLastEncoderPosition = encoderPosition;
+				nLastSpindleEncoderPosition = encoderPosition;
 			
 				synchronousPosition += encoderDelta;
 				nMotorDestination = synchronousPosition * nTicksPerRotation / synchronousRatio;
@@ -670,7 +733,7 @@ public:
 		synchronousPosition = 0;
 		nMotorPosition = 0;
 		nMotorDestination = 0;
-		nLastEncoderPosition = 0;
+		nLastSpindleEncoderPosition = 0;
 		bMotorClockwise = true;
 		eState = eRunning;
 		__HAL_TIM_SET_COUNTER(&htim2, 0);
@@ -709,20 +772,43 @@ private:
 	
 	void SetMotorDirection(bool state)
 	{
-		if (!bPositiveMove)
+		if (bMotorReverse)
 			state = !state;
 		HAL_GPIO_WritePin(GPIO_STEPPER_DIR_GPIO_Port, GPIO_STEPPER_DIR_Pin, state ? GPIO_PinState::GPIO_PIN_SET : GPIO_PinState::GPIO_PIN_RESET);
 	}
 	
-	void SetMotorEnable(bool state)
+	void SetMotorEnable(bool enabled)
 	{
-		HAL_GPIO_WritePin(GPIO_STEPPER_DIR_GPIO_Port, GPIO_STEPPER_ENABLE_Pin, state ? GPIO_PinState::GPIO_PIN_SET : GPIO_PinState::GPIO_PIN_RESET);
+		// if we enable for the first time, reset the encoder.
+		bool bFirst = enabled && HAL_GPIO_ReadPin(GPIO_STEPPER_DIR_GPIO_Port, GPIO_STEPPER_ENABLE_Pin) == GPIO_PinState::GPIO_PIN_RESET;
+		HAL_GPIO_WritePin(GPIO_STEPPER_DIR_GPIO_Port, GPIO_STEPPER_ENABLE_Pin, enabled ? GPIO_PinState::GPIO_PIN_SET : GPIO_PinState::GPIO_PIN_RESET);
+		if (bFirst)
+		{
+			// small delay
+			HAL_Delay(2); // 2ms
+			last_encoder_position = 0;
+			__HAL_TIM_SET_COUNTER(hEnc, 0);
+		}
 	}
 	
-	void OutputQuadrature(uint32_t nMotorPosition)
+	void OutputQuadrature(bool bClockwise)
 	{
-		//static uint8_t Quadrature[] = { 0, 0x20, 0x30, 0x10 };
-		//MOTOR_PORT = (MOTOR_PORT & ~0x30) | Quadrature[nMotorPosition & 0x3];
+		// Quadrature only ever changes one pin at a time, so we can toggle the pin so we don't accidently update the other pins that update during an interrupt
+		
+		//	#	A B
+		//	0	0 0
+		//	1	1 0
+		//	2	1 1
+		//	3	0 1
+		
+		switch (encoderOutLast & 0x1)
+		{
+			case 0: HAL_GPIO_TogglePin(GPIO_ENCODER_OUT_A_GPIO_Port, bClockwise ? GPIO_ENCODER_OUT_A_Pin : GPIO_ENCODER_OUT_B_Pin); break;
+			case 1: HAL_GPIO_TogglePin(GPIO_ENCODER_OUT_A_GPIO_Port, bClockwise ? GPIO_ENCODER_OUT_B_Pin : GPIO_ENCODER_OUT_A_Pin); break;
+			//case 2: HAL_GPIO_TogglePin(GPIO_ENCODER_OUT_A_GPIO_Port, bClockwise ? GPIO_ENCODER_OUT_A_Pin : GPIO_ENCODER_OUT_B_Pin); break;
+			//case 3: HAL_GPIO_TogglePin(GPIO_ENCODER_OUT_A_GPIO_Port, bClockwise ? GPIO_ENCODER_OUT_B_Pin : GPIO_ENCODER_OUT_A_Pin); break;
+		}
+		encoderOutLast += bClockwise ? 1 : 1;
 	}
 	
 	void EnableTimerInterrupt(bool enable)

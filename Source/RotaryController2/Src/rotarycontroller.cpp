@@ -16,9 +16,12 @@ static DisplayOLEDNHDUS2066 displayDevice;
 static Display<4,20> display(&displayDevice);
 static Keys keys;
 static Buzzer buzzer;
-static Motion motion(&htim3);
+static Motion motion(&htim3,&htim2);
 static EepromSPI25lc640 eepromDevice;
 static uint8_t activeDevice;
+
+#define htim_encoder	htim2
+#define htim_spindle	htim1
 
 #define MAX_DEVICES		2
 #define MAX_SEGMENTS	20
@@ -65,6 +68,8 @@ struct Eeprom
 			Units not_used;//SequencesUnits;					// step or degrees - always degrees
 			Units LastUnits;						// "last units" - degrees, steps?
 			int32_t ContinuousSpeed;				// last continuous speed
+			uint32_t EncoderPulsesPerRevolution;	// Number of encoder quadrature pulses (4xcount)
+			bool EncoderReverse;					// false=normal, true=reverse
 		} DeviceConfig[MAX_DEVICES];
 	
 	} Config;
@@ -105,6 +110,8 @@ void RotaryController::ReadEEPROM()
 		eeprom.Config.DeviceConfig[0].DeviceGearRatio = 90;						// device gear ratio (5:1 ER32 axis, 90:1 rotary table) Dividend/Divisor?
 		eeprom.Config.DeviceConfig[0].Backlash = 20;							// steps
 		eeprom.Config.DeviceConfig[0].ReverseDirection = false;					// false=normal, true=reverse
+		eeprom.Config.DeviceConfig[0].EncoderPulsesPerRevolution = 0;
+		eeprom.Config.DeviceConfig[0].EncoderReverse = false;
 		eeprom.Config.DeviceConfig[0].SlowVelocityMax = 1666;					// steps/s - stepper 50 rpm = 200*10 * 50 / 60 
 		eeprom.Config.DeviceConfig[0].SlowAcceleration = 1666;					// steps/s/s
 		eeprom.Config.DeviceConfig[0].SlowSFM = 0;								// Used to set Slow Max Vel - not available for "fast" - fast is jog like
@@ -125,6 +132,8 @@ void RotaryController::ReadEEPROM()
 		eeprom.Config.DeviceConfig[1].DeviceGearRatio = 5;						// device gear ratio (5:1 ER32 axis, 90:1 rotary table) Dividend/Divisor?
 		eeprom.Config.DeviceConfig[1].Backlash = 5;								// steps
 		eeprom.Config.DeviceConfig[1].ReverseDirection = false;					// false=normal, true=reverse
+		eeprom.Config.DeviceConfig[1].EncoderPulsesPerRevolution = 4000;
+		eeprom.Config.DeviceConfig[1].EncoderReverse = true;
 		eeprom.Config.DeviceConfig[1].SlowVelocityMax = 333;					// steps/s - stepper 10 rpm = 200*10 * 10 / 60 
 		eeprom.Config.DeviceConfig[1].SlowAcceleration = 333;					// steps/s/s
 		eeprom.Config.DeviceConfig[1].SlowSFM = 0;								// Used to set Slow Max Vel - not available for "fast" - fast is jog like
@@ -154,7 +163,8 @@ RotaryController::RotaryController()
 
 void RotaryController::Init()
 {
-	HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+	HAL_TIM_Encoder_Start(&htim_spindle, TIM_CHANNEL_ALL);
+	HAL_TIM_Encoder_Start(&htim_encoder, TIM_CHANNEL_ALL);
 	display.Init();
 }
 
@@ -231,6 +241,8 @@ struct MenuItem setupMenu[] =
 	{ "Gear Ratio", &eeprom.Config.DeviceConfig[0].DeviceGearRatio, UINT32, 1, 10000, NULL, NULL },
 	{ "Backlash", &eeprom.Config.DeviceConfig[0].Backlash, UINT32, 0, 1000, NULL, NULL },
 	{ "Reverse Motor", &eeprom.Config.DeviceConfig[0].ReverseDirection, BOOL, 0, 0, NULL, NULL },
+	{ "Enc. Steps Per Rev.", &eeprom.Config.DeviceConfig[0].EncoderPulsesPerRevolution, UINT32, 1, 10000, NULL, NULL },
+	{ "Reverse Encoder", &eeprom.Config.DeviceConfig[0].EncoderReverse, BOOL, 0, 0, NULL, NULL },
 	{ "Slow Max Vel", &eeprom.Config.DeviceConfig[0].SlowVelocityMax, UINT32, 1, 99999, NULL, NULL },
 	{ "Slow Acc", &eeprom.Config.DeviceConfig[0].SlowAcceleration, UINT32, 1, 99999, NULL, NULL },
 	{ "Slow SFM", &eeprom.Config.DeviceConfig[0].SlowSFM, UINT32, 1, 10000, NULL, NULL },
@@ -248,14 +260,16 @@ void RotaryController::DoSetupChangeDevice()
 	setupMenu[2].memAddr = &eeprom.Config.DeviceConfig[i].DeviceGearRatio;
 	setupMenu[3].memAddr = &eeprom.Config.DeviceConfig[i].Backlash;
 	setupMenu[4].memAddr = &eeprom.Config.DeviceConfig[i].ReverseDirection;
-	setupMenu[5].memAddr = &eeprom.Config.DeviceConfig[i].SlowVelocityMax;
-	setupMenu[6].memAddr = &eeprom.Config.DeviceConfig[i].SlowAcceleration;
-	setupMenu[7].memAddr = &eeprom.Config.DeviceConfig[i].SlowSFM;
-	setupMenu[8].memAddr = &eeprom.Config.DeviceConfig[i].SlowRadius;
-	setupMenu[9].memAddr = &eeprom.Config.DeviceConfig[i].FastVelocityMax;
-	setupMenu[10].memAddr = &eeprom.Config.DeviceConfig[i].FastAcceleration;
-	setupMenu[11].memAddr = &eeprom.Config.DeviceConfig[i].SynchronousStepsPerRev;
-	setupMenu[12].memAddr = &eeprom.Config.DeviceConfig[i].SynchronousRatio;
+	setupMenu[5].memAddr = &eeprom.Config.DeviceConfig[i].EncoderPulsesPerRevolution;
+	setupMenu[6].memAddr = &eeprom.Config.DeviceConfig[i].EncoderReverse;
+	setupMenu[7].memAddr = &eeprom.Config.DeviceConfig[i].SlowVelocityMax;
+	setupMenu[8].memAddr = &eeprom.Config.DeviceConfig[i].SlowAcceleration;
+	setupMenu[9].memAddr = &eeprom.Config.DeviceConfig[i].SlowSFM;
+	setupMenu[10].memAddr = &eeprom.Config.DeviceConfig[i].SlowRadius;
+	setupMenu[11].memAddr = &eeprom.Config.DeviceConfig[i].FastVelocityMax;
+	setupMenu[12].memAddr = &eeprom.Config.DeviceConfig[i].FastAcceleration;
+	setupMenu[13].memAddr = &eeprom.Config.DeviceConfig[i].SynchronousStepsPerRev;
+	setupMenu[14].memAddr = &eeprom.Config.DeviceConfig[i].SynchronousRatio;
 }
 
 void RotaryController::DisplaySetupValue(uint8_t col, uint8_t row, MenuItem &item)
@@ -666,23 +680,31 @@ void RotaryController::MakeDegrees( char *buffer, uint32_t buflen, int32_t nValu
 
 void RotaryController::DisplayCoordinates()
 {
-	display.Text(0,2,"Stp:" );
-	display.Text(0,3,"Deg:" );
-
 	uint32_t nLastDisplayPosition = motion.MotorPosition();
 	int32_t nDestination = motion.MotorDesitination();
 
-	display.Int32Right(5,2,nLastDisplayPosition, 7, ' ' );
-	display.Int32Right(13,2,nDestination, 7, ' ' );
-	
-	// Degrees
-	char buf[20];
-	MakeDegrees(buf, sizeof(buf), nLastDisplayPosition);
-	display.Text(5, 3, buf);
+	if (movementUnits == Units::Steps)
+	{
+		display.Text(0, 2, "Stp:");
+		display.Int32Right(5,2,nLastDisplayPosition, 7, ' ' );
+		display.Int32Right(13,2,nDestination, 7, ' ' );
+	}
+	else
+	{
+		display.Text(0,2,"Deg:" );
+		
+		char buf[20];
+		MakeDegrees(buf, sizeof(buf), nLastDisplayPosition);
+		display.Text(5, 2, buf);
 
-	MakeDegrees(buf, sizeof(buf), nDestination);
-	display.Text(13, 3, buf);
+		MakeDegrees(buf, sizeof(buf), nDestination);
+		display.Text(13, 2, buf);
+	}
 	
+	display.Text(0, 3, "Enc:");
+	display.Int32Right(5,3,motion.EncoderPosition(), 7, ' ' );
+	
+
 	switch (motion.eState)
 	{
 		case Motion::eAccelerating: display.Text(18, 0, 'a'); break;
@@ -821,6 +843,7 @@ void RotaryController::DoJog()
 		else if (key == Keys::KEY_ZERO_PRESSED && motion.eState == Motion::eStopped)
 		{
 			motion.ResetMotorCounters();
+			SetBacklight(EBacklight::Green);
 			redrawDisplay = true;
 		}
 		else if (key == Keys::KEY_SPEED_PRESSED && motion.eState == Motion::eStopped)
@@ -946,6 +969,7 @@ void RotaryController::DoDivisions()
 			if (motion.eState == Motion::eStopped)
 			{
 				motion.ResetMotorCounters();
+				SetBacklight(EBacklight::Green);
 				redrawDisplay = true;
 			}
 		}
@@ -1088,6 +1112,7 @@ void RotaryController::DoContinuous( void )
 		else if ( key == Keys::KEY_ZERO_PRESSED && motion.eState == Motion::eStopped )
 		{
 			motion.ResetMotorCounters();
+			SetBacklight(EBacklight::Green);
 			redrawDisplay = true;
 		}
 		else if ( key == Keys::KEY_START_PRESSED && motion.eState == Motion::eStopped)
@@ -1287,6 +1312,7 @@ void RotaryController::DoSegment()
 		else if (key == Keys::KEY_ZERO_PRESSED && motion.eState == Motion::eStopped)
 		{
 			motion.ResetMotorCounters();
+			SetBacklight(EBacklight::Green);
 			redrawDisplay = true;
 		}	
 		else if (key == Keys::KEY_SPEED_PRESSED)
@@ -1320,7 +1346,7 @@ bool RotaryController::DrawSynchronised(bool block)
 	
 	//DisplayCoordinates();
 	char buf[21];
-	uint16_t nEncoderPosition = __HAL_TIM_GET_COUNTER(&htim2);
+	uint16_t nEncoderPosition = __HAL_TIM_GET_COUNTER(&htim_spindle);
 	snprintf(buf, sizeof(buf), "Enc: %u", nEncoderPosition);
 	display.Text(0,2,buf);
 
@@ -1374,11 +1400,11 @@ void RotaryController::DoSynchronised()
 			SetRunButton(true);
 		}
 		
-		if ( lastEncoderPosition != __HAL_TIM_GET_COUNTER(&htim2) ||
+		if ( lastEncoderPosition != __HAL_TIM_GET_COUNTER(&htim_spindle) ||
 		     lastPosition != motion.MotorPosition())
 		{
 			redrawDisplay = true;
-			lastEncoderPosition = __HAL_TIM_GET_COUNTER(&htim2);
+			lastEncoderPosition = __HAL_TIM_GET_COUNTER(&htim_spindle);
 		}
 		
 	}
@@ -1401,6 +1427,9 @@ uint32_t RotaryController::DoKeyScanEtc()
 //		on = !on;
 //	}
 
+	if ( motion.EncoderError())
+		SetBacklight(EBacklight::Red);
+		
 	buzzer.Update();	
 	uint32_t k = keys.ScanKeys();
 	if (k & Keys::KEY_PRESSED)
@@ -1417,7 +1446,6 @@ void RotaryController::SetParameters( void )
 	nStepperDivisionsPerRotation = eeprom.Config.DeviceConfig[activeDevice].MotorStepsPerRevolution;		// Steps per rotation on stepper
 	nGearRatio = eeprom.Config.DeviceConfig[activeDevice].DeviceGearRatio;									// Worm to table turn ratio
 	nBacklash = eeprom.Config.DeviceConfig[activeDevice].Backlash;
-	bMotorReverseDirection = eeprom.Config.DeviceConfig[activeDevice].ReverseDirection;
 
 	movementUnits = eeprom.Config.DeviceConfig[activeDevice].LastUnits;
 	isSlowSpeed = eeprom.Config.DeviceConfig[activeDevice].SlowSpeedMode;
@@ -1428,6 +1456,9 @@ void RotaryController::SetParameters( void )
 	motion.SetMotorConfig(eeprom.Config.DeviceConfig[activeDevice].Backlash,
 						  eeprom.Config.DeviceConfig[activeDevice].MotorStepsPerRevolution,
 						  eeprom.Config.DeviceConfig[activeDevice].DeviceGearRatio,
+						  eeprom.Config.DeviceConfig[activeDevice].ReverseDirection,
+						  eeprom.Config.DeviceConfig[activeDevice].EncoderPulsesPerRevolution,
+						  eeprom.Config.DeviceConfig[activeDevice].EncoderReverse,
 						  isSlowSpeed ? eeprom.Config.DeviceConfig[activeDevice].SlowVelocityMax : eeprom.Config.DeviceConfig[activeDevice].FastVelocityMax,
 						  isSlowSpeed ? eeprom.Config.DeviceConfig[activeDevice].SlowAcceleration : eeprom.Config.DeviceConfig[activeDevice].FastVelocityMax);
 	

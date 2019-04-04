@@ -36,7 +36,6 @@ class RotaryController
 	uint32_t nStepperDivisionsPerRotation;			// Steps per rotation on stepper
 	uint32_t nGearRatio;							// Worm to table turn ratio
 	uint32_t nBacklash;
-	bool bMotorReverseDirection;
 	Units movementUnits;
 	int32_t division, divisions;
 	bool isSlowSpeed;
