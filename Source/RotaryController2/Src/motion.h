@@ -3,9 +3,11 @@
 #include "main.h"
 #include "dwt_stm32_delay.h"
 
-#define STEP_PULSE_HIGH_US 4
+#define STEP_PULSE_HIGH_US  4
 #define MISSED_STEP_COUNT	20	// 200 step motor, 10 microsteps.  1 missed step 10 +/- 5.  
 
+#define DEGREES_SCALE		100UL
+#define DEGREES_SCALE_DIGITS 2
 class MotionTests;
 
 class Motion
@@ -85,34 +87,39 @@ private:
 		 } 
 	}
 
-	void UpdateEncoderPosition()
+	bool UpdateEncoderPosition()
 	{
 		if(nEncoderTicksPerRevolution)
 		{
 			uint16_t current_encoder_position = __HAL_TIM_GET_COUNTER(hEnc);
 			int16_t diff = last_encoder_position - current_encoder_position;
-			if ( bEncoderReverse )
-				nEncoderPosition -= diff;
-			else
-				nEncoderPosition += diff;
-			
-			if (nEncoderPosition > nEncoderTicksPerRevolution)
-				nEncoderPosition -= nEncoderTicksPerRevolution;
-			else if (nEncoderPosition < 0)
-				nEncoderPosition += nEncoderTicksPerRevolution;
-			
-			if (!bEncoderError)
+			if (diff != 0)
 			{
-				// todo - divide will be slow 
-				int32_t encoder_steps = nEncoderPosition * nTicksPerRotation / nEncoderTicksPerRevolution;
-				int32_t error = abs(encoder_steps - nMotorPosition);
-				if (error > nTicksPerRotation / 2)
-					error -= nTicksPerRotation;
-				if (abs(error) > MISSED_STEP_COUNT)
-					bEncoderError = true;
+				if ( bEncoderReverse )
+					nEncoderPosition -= diff;
+				else
+					nEncoderPosition += diff;
+			
+				if (nEncoderPosition > nEncoderTicksPerRevolution)
+					nEncoderPosition -= nEncoderTicksPerRevolution;
+				else if (nEncoderPosition < 0)
+					nEncoderPosition += nEncoderTicksPerRevolution;
+			
+				if (!bEncoderError)
+				{
+					// todo - divide will be slow 
+					int32_t encoder_steps = nEncoderPosition * nTicksPerRotation / nEncoderTicksPerRevolution;
+					int32_t error = abs(encoder_steps - nMotorPosition);
+					if (error > nTicksPerRotation / 2)
+						error -= nTicksPerRotation;
+					if (abs(error) > MISSED_STEP_COUNT)
+						bEncoderError = true;
+				}
+				last_encoder_position = current_encoder_position;
+				return true;
 			}
-			last_encoder_position = current_encoder_position;
 		}
+		return false;
 	}
 	
 public:
@@ -150,8 +157,13 @@ public:
 		nPendingMoveDistance = 0;
 		interrupt_tick = 0;
 		nEncoderPosition = 0;
-		bEncoderError = false;
+		ClearEncoderError();
 		__enable_irq();
+	}
+	
+	void ClearEncoderError()
+	{
+		bEncoderError = false;
 	}
 	
 	bool EncoderError()
@@ -509,7 +521,7 @@ public:
 				{
 					return;
 				}
-				else if (nDistance == 1)
+				else if (nDistance <= 2)
 				{
 					// fudge.
 
@@ -520,20 +532,24 @@ public:
 						SetMotorDirection(false);
 
 					// TODO - use one pulse timer feature.  Delays are bad.
-					SetMotorStep(true);
-					DWT_Delay_us(STEP_PULSE_HIGH_US);
-					SetMotorStep(false);
+					while(nDistance > 0)
+					{
+						SetMotorStep(true);
+						DWT_Delay_us(STEP_PULSE_HIGH_US);
+						SetMotorStep(false);
 
-					// We always step 1 unit at a time.
-					if (bMotorClockwise)
-						nMotorPosition++;
-					else
-						nMotorPosition--;
+						// We always step 1 unit at a time.
+						if (bMotorClockwise)
+							nMotorPosition++;
+						else
+							nMotorPosition--;
 
-					UpdateEncoderPosition();
+						UpdateEncoderPosition();
 					
-					// Update AB output
-					OutputQuadrature(bMotorClockwise);
+						// Update AB output
+						OutputQuadrature(bMotorClockwise);
+						nDistance--;
+					}
 					return;
 				}
 
@@ -620,6 +636,14 @@ public:
 		return n;
 	}
 	
+	bool Update()
+	{
+		if (eState == Motion::eStopped)
+			if (UpdateEncoderPosition())
+				return true;
+		return false;
+	}
+	
 	void MotorStop()
 	{
 		if (bSynchronousMotion)
@@ -649,9 +673,16 @@ public:
 
 	void SetContinuousSpeed(int32_t nContinuousSpeed)
 	{
+		SetMotorEnable(true);
+		
 		bool bDir = nContinuousSpeed >= 0;
-		targetContinuousSpeed = MakeRawSpeed(nContinuousSpeed);
+		targetContinuousSpeed = MakeRawSpeed(abs(nContinuousSpeed));
+		if (targetContinuousSpeed > nMaxVelocity)
+			targetContinuousSpeed = nMaxVelocity;
 
+		if (targetContinuousSpeed == nVelocity)
+			return;
+		
 		if (eState == eStopped)
 		{
 			bMotorClockwise = bDir;	// only change direction if we are stopped
@@ -742,15 +773,15 @@ public:
 	
 	uint32_t AbsDegreesToSteps( int32_t nDegrees )
 	{
-		while ( nDegrees >= 360000 )
-			nDegrees -= 360000;
+		while ( nDegrees >= 360*DEGREES_SCALE )
+			nDegrees -= 360*DEGREES_SCALE;
 		while ( nDegrees < 0 )
-			nDegrees += 360000;
+			nDegrees += 360*DEGREES_SCALE;
 
 		// Convert absolute position in degrees to absolute position in steps.
 		unsigned long long nSteps = nDegrees;
 		nSteps *= nTicksPerRotation;
-		nSteps /= 360000UL;
+		nSteps /= 360UL*DEGREES_SCALE;
 
 		return (uint32_t)nSteps;
 	}
@@ -759,22 +790,16 @@ public:
 	{
 		long long nSteps = nDegrees;
 		nSteps *= nTicksPerRotation;
-		nSteps /= 360000UL;
+		nSteps /= 360UL*DEGREES_SCALE;
 
-		return (uint32_t)nSteps;
+		return nSteps;
 	}
 	
-private:
-	void SetMotorStep(bool state)
+	void Recover()
 	{
-		HAL_GPIO_WritePin(GPIO_STEPPER_STEP_GPIO_Port, GPIO_STEPPER_STEP_Pin, state ? GPIO_PinState::GPIO_PIN_SET : GPIO_PinState::GPIO_PIN_RESET);
-	}
-	
-	void SetMotorDirection(bool state)
-	{
-		if (bMotorReverse)
-			state = !state;
-		HAL_GPIO_WritePin(GPIO_STEPPER_DIR_GPIO_Port, GPIO_STEPPER_DIR_Pin, state ? GPIO_PinState::GPIO_PIN_SET : GPIO_PinState::GPIO_PIN_RESET);
+		int32_t actualPosition = nEncoderPosition * nTicksPerRotation / nEncoderTicksPerRevolution;
+		nMotorPosition = actualPosition;
+		ClearEncoderError();
 	}
 	
 	void SetMotorEnable(bool enabled)
@@ -789,6 +814,19 @@ private:
 			last_encoder_position = 0;
 			__HAL_TIM_SET_COUNTER(hEnc, 0);
 		}
+	}
+	
+private:
+	void SetMotorStep(bool state)
+	{
+		HAL_GPIO_WritePin(GPIO_STEPPER_STEP_GPIO_Port, GPIO_STEPPER_STEP_Pin, state ? GPIO_PinState::GPIO_PIN_SET : GPIO_PinState::GPIO_PIN_RESET);
+	}
+	
+	void SetMotorDirection(bool state)
+	{
+		if (bMotorReverse)
+			state = !state;
+		HAL_GPIO_WritePin(GPIO_STEPPER_DIR_GPIO_Port, GPIO_STEPPER_DIR_Pin, state ? GPIO_PinState::GPIO_PIN_SET : GPIO_PinState::GPIO_PIN_RESET);
 	}
 	
 	void OutputQuadrature(bool bClockwise)
@@ -854,7 +892,8 @@ private:
 				{
 					// Truncating errors can stop us reaching target velocity - fudge here.
 					if (targetContinuousSpeed != nNewVelocity)
-						nNewVelocity += sign(targetContinuousSpeed - nNewVelocity);
+						//nNewVelocity += sign(targetContinuousSpeed - nNewVelocity);
+						nNewVelocity = targetContinuousSpeed;
 				}
 				else if ( !bContinuousMode )
 					nRunTime--;

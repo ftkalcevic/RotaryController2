@@ -91,54 +91,34 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [GeneratedDocument1]
-DocumentPath=Outputs\RotaryController2.DRR
-DItemRevisionGUID=
-
-[GeneratedDocument2]
-DocumentPath=Outputs\RotaryController2.EXTREP
-DItemRevisionGUID=
-
-[GeneratedDocument3]
 DocumentPath=Outputs\RotaryController2.GBL
 DItemRevisionGUID=
 
-[GeneratedDocument4]
+[GeneratedDocument2]
 DocumentPath=Outputs\RotaryController2.GBO
 DItemRevisionGUID=
 
-[GeneratedDocument5]
+[GeneratedDocument3]
 DocumentPath=Outputs\RotaryController2.GBS
 DItemRevisionGUID=
 
-[GeneratedDocument6]
+[GeneratedDocument4]
 DocumentPath=Outputs\RotaryController2.GTL
 DItemRevisionGUID=
 
-[GeneratedDocument7]
+[GeneratedDocument5]
 DocumentPath=Outputs\RotaryController2.GTO
 DItemRevisionGUID=
 
-[GeneratedDocument8]
+[GeneratedDocument6]
 DocumentPath=Outputs\RotaryController2.GTS
 DItemRevisionGUID=
 
-[GeneratedDocument9]
-DocumentPath=Outputs\RotaryController2.LDP
-DItemRevisionGUID=
-
-[GeneratedDocument10]
+[GeneratedDocument7]
 DocumentPath=Outputs\RotaryController2.Outline
 DItemRevisionGUID=
 
-[GeneratedDocument11]
-DocumentPath=Outputs\RotaryController2.REP
-DItemRevisionGUID=
-
-[GeneratedDocument12]
-DocumentPath=Outputs\RotaryController2.RUL
-DItemRevisionGUID=
-
-[GeneratedDocument13]
+[GeneratedDocument8]
 DocumentPath=Outputs\RotaryController2.TXT
 DItemRevisionGUID=
 

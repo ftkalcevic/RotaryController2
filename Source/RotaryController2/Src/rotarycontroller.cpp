@@ -37,6 +37,7 @@ enum Mode: uint8_t
 	emContinuous,
 	emSegment,
 	emSynchronised,
+	emRecovery,
 	emSetup,
 	//emTest,
 	emMaxModes
@@ -223,7 +224,6 @@ void RotaryController::DoSplash()
 			{
 				display.Text(0, 2, "Warning EEPROM Reset");
 				display.Update();
-				eepromHasBeenReset = false;
 			}
 			else
 			{
@@ -390,10 +390,10 @@ bool RotaryController::EditInt32( int32_t *n, uint8_t col, uint8_t row, int32_t 
 bool RotaryController::EditUInt32Frac( uint8_t col, uint8_t row, uint32_t *nValue)
 {
 	uint32_t angle = *nValue;
-	while (angle >= 360000)
-		angle -= 360000;
+	while (angle >= 360*DEGREES_SCALE)
+		angle -= 360*DEGREES_SCALE;
 	
-	div_t d = div(angle, 1000);
+	div_t d = div(angle, (int)DEGREES_SCALE);
 	uint32_t hi = d.quot;
 	uint32_t lo = d.rem;
 	
@@ -446,7 +446,7 @@ bool RotaryController::EditUInt32Frac( uint8_t col, uint8_t row, uint32_t *nValu
 			}
 			else
 			{
-				nRet *= 1000;
+				nRet *= DEGREES_SCALE;
 				
 				uint8_t n = 3;
 				for ( ; i < nDigit && n != 0; i++, n-- )
@@ -660,20 +660,21 @@ void RotaryController::DoSetup()
 
 void RotaryController::MakeDegrees( char *buffer, uint32_t buflen, int32_t nValue )
 {
-	while ( nValue < 0 )
-		nValue += nTicksPerRotation; 
+	//	while ( nValue < 0 )
+	//		nValue += nTicksPerRotation; 
+	//
+	//	while ( nValue >= nTicksPerRotation )
+	//		nValue -= nTicksPerRotation;
 
-	while ( nValue >= nTicksPerRotation )
-		nValue -= nTicksPerRotation;
-
-	uint32_t degreeTicks = 360 * nValue;
+	int s = sign(nValue);
+	uint32_t degreeTicks = 360 * abs(nValue);
 	div_t t = div((int)degreeTicks, (int)nTicksPerRotation);
 	
 	int degrees = t.quot;
 	int frac = t.rem;
-	frac = (frac * 1000)/nTicksPerRotation;
+	frac = (frac * DEGREES_SCALE)/nTicksPerRotation;
 	
-	snprintf(buffer, buflen, "%3d.%03d", degrees, frac);
+	snprintf(buffer, buflen, "%*d.%0*d", DEGREES_SCALE_DIGITS, s*degrees, DEGREES_SCALE_DIGITS, frac);
 	
 	return;
 }
@@ -683,11 +684,15 @@ void RotaryController::DisplayCoordinates()
 	uint32_t nLastDisplayPosition = motion.MotorPosition();
 	int32_t nDestination = motion.MotorDesitination();
 
+	int32_t enc = motion.EncoderPosition() * eeprom.Config.DeviceConfig[activeDevice].MotorStepsPerRevolution / eeprom.Config.DeviceConfig[activeDevice].EncoderPulsesPerRevolution;
 	if (movementUnits == Units::Steps)
 	{
 		display.Text(0, 2, "Stp:");
 		display.Int32Right(5,2,nLastDisplayPosition, 7, ' ' );
 		display.Int32Right(13,2,nDestination, 7, ' ' );
+		
+		display.Text(0, 3, "Enc:");
+		display.Int32Right(5,3,enc, 7, ' ' );
 	}
 	else
 	{
@@ -699,10 +704,11 @@ void RotaryController::DisplayCoordinates()
 
 		MakeDegrees(buf, sizeof(buf), nDestination);
 		display.Text(13, 2, buf);
+		
+		display.Text(0, 3, "Enc:");
+		MakeDegrees(buf, sizeof(buf), enc);
+		display.Text(5, 3, buf);
 	}
-	
-	display.Text(0, 3, "Enc:");
-	display.Int32Right(5,3,motion.EncoderPosition(), 7, ' ' );
 	
 
 	switch (motion.eState)
@@ -798,7 +804,7 @@ void RotaryController::DoGoto(uint8_t row)
 	{
 		uint64_t degrees64 = motion.MotorPosition();
 		degrees64 *= 360;
-		degrees64 *= 1000; 
+		degrees64 *= DEGREES_SCALE; 
 		degrees64 /= nTicksPerRotation;
 		uint32_t degrees = (uint32_t)degrees64;
 		if (EditUInt32Frac(7, 1, &degrees))
@@ -814,7 +820,7 @@ void RotaryController::DoJog()
 {
 	const int DISPLAY_UPDATE_PERIOD = 50;	// 20 times per second
 	DrawJog();
-	bool redrawDisplay = true;
+	redrawDisplay = true;
 	int32_t lastPosition = 0;
 	uint32_t next_redraw = 0;
 
@@ -898,7 +904,7 @@ void RotaryController::DoDivisions()
 {
 	const int DISPLAY_UPDATE_PERIOD = 50;	// 20 times per second
 	
-	bool redrawDisplay = true;
+	redrawDisplay = true;
 	int32_t lastPosition = 0;
 	uint32_t next_redraw = 0;
 
@@ -1049,10 +1055,10 @@ bool RotaryController::DrawContinous(bool block)
 
 void RotaryController::DoContinuous( void )
 {
-	uint32_t maxSpeed = isSlowSpeed ? eeprom.Config.DeviceConfig[activeDevice].SlowVelocityMax : eeprom.Config.DeviceConfig[activeDevice].FastVelocityMax;
+	int32_t maxSpeed = isSlowSpeed ? eeprom.Config.DeviceConfig[activeDevice].SlowVelocityMax : eeprom.Config.DeviceConfig[activeDevice].FastVelocityMax;
 	continuousSpeed = eeprom.Config.DeviceConfig[activeDevice].ContinuousSpeed;
 
-	bool redrawDisplay = true;
+	redrawDisplay = true;
 	uint32_t next_redraw = 0;
 	int32_t lastPosition = 0;
 	for (;;)
@@ -1078,19 +1084,18 @@ void RotaryController::DoContinuous( void )
 			if (movementUnits == Degrees)
 				nSpeedValue = motion.DegreesToSteps(nSpeedValue);
 			
-			if ( nSpeedValue < 0 )
+			int32_t newSpeed = continuousSpeed + nSpeedValue;
+			if (motion.eState != Motion::eStopped && 		// Moving, and change of direction.
+				 sign(newSpeed) != sign(continuousSpeed))
 			{
-				//if ( nContinuousSpeed < abs(nValue) )
-				//	nContinuousSpeed = 0;
-				//else
-					continuousSpeed += nSpeedValue;
-				if ( abs(continuousSpeed) > maxSpeed )
-					continuousSpeed = -maxSpeed;
+				// No
 			}
 			else
 			{
-				continuousSpeed += nSpeedValue;
-				if ( continuousSpeed > maxSpeed )
+				continuousSpeed = newSpeed;
+				if ( continuousSpeed < -maxSpeed )
+					continuousSpeed = -maxSpeed;
+				else if ( continuousSpeed > maxSpeed )
 					continuousSpeed = maxSpeed;
 			}
 
@@ -1180,7 +1185,7 @@ bool RotaryController::DrawSegment(uint32_t segment, uint32_t segments, uint32_t
 
 void RotaryController::DoSegment()
 {
-	bool redrawDisplay = true, calculateSteps = true;
+	bool calculateSteps = true;
 	uint32_t next_redraw = 0;
 	int32_t lastPosition = 0;
 	uint32_t nTotalDegreesPerSeries;
@@ -1188,6 +1193,7 @@ void RotaryController::DoSegment()
 	uint32_t nSegmentRepeats = 0;
 	uint32_t nSegments;
 	uint32_t nDegrees[MAX_SEGMENTS];
+	redrawDisplay = true;
 	
 	for (;;)
 	{
@@ -1320,6 +1326,11 @@ void RotaryController::DoSegment()
 			ToggleSpeed();
 			redrawDisplay = true;
 		}
+		else if (key == Keys::KEY_UNITS_PRESSED && motion.eState == Motion::eStopped)
+		{
+			ToggleUnits();
+			redrawDisplay = true;
+		}		
 		
 		if (lastPosition != motion.MotorPosition())
 		{
@@ -1346,6 +1357,7 @@ bool RotaryController::DrawSynchronised(bool block)
 	
 	//DisplayCoordinates();
 	char buf[21];
+	int32_t enc = motion.EncoderPosition() * eeprom.Config.DeviceConfig[activeDevice].MotorStepsPerRevolution / eeprom.Config.DeviceConfig[activeDevice].EncoderPulsesPerRevolution;
 	uint16_t nEncoderPosition = __HAL_TIM_GET_COUNTER(&htim_spindle);
 	snprintf(buf, sizeof(buf), "Enc: %u", nEncoderPosition);
 	display.Text(0,2,buf);
@@ -1362,7 +1374,7 @@ bool RotaryController::DrawSynchronised(bool block)
 
 void RotaryController::DoSynchronised()
 {
-	bool redrawDisplay = true;
+	redrawDisplay = true;
 	uint32_t next_redraw = 0;
 	int32_t lastPosition = 0;
 	uint16_t lastEncoderPosition = 0;
@@ -1410,23 +1422,93 @@ void RotaryController::DoSynchronised()
 	}
 
 }
+
+
+bool RotaryController::DrawDoRecovery(bool block)
+{
+	display.ClearScreen();
+	display.Text(0,0,"RECOVERY");
+	
+	ShowRotateSpeed();
+	
+	display.Text(0, 1, movementUnits == Units::Degrees ? "Degrees" : "Steps");
+	
+	DisplayCoordinates();
+	
+	return display.Update(block);
+}
+
+
+void RotaryController::DoRecovery()
+{
+	redrawDisplay = true;
+	uint32_t next_redraw = 0;
+	int32_t lastPosition = 0;
+	uint16_t lastEncoderPosition = 0;
+	
+	for (;;)
+	{
+		if ( HAL_GetTick() > next_redraw )
+		{
+			if (redrawDisplay)
+			{
+				if ( DrawDoRecovery(false) )
+					redrawDisplay = false;
+			}
+			const int DISPLAY_UPDATE_PERIOD = 50;	// 20 times per second
+			next_redraw = DISPLAY_UPDATE_PERIOD + HAL_GetTick();
+		}
+		
+		uint32_t key = DoKeyScanEtc();
+		if (key == (Keys::KEY_MODE_PRESSED))
+			break;
+		
+		else if ( key == Keys::KEY_MODE_PRESSED && motion.eState == Motion::eStopped )
+		{
+			break;
+		}
+		else if ( key == Keys::KEY_STOP_PRESSED && motion.eState != Motion::eStopped )
+		{
+			// stop
+			motion.MotorStop();
+		}
+		else if ( key == Keys::KEY_GO_PRESSED && motion.eState == Motion::eStopped )
+		{
+			SetBacklight(EBacklight::Green);
+			motion.Recover();
+		}
+		
+		if ( lastEncoderPosition != __HAL_TIM_GET_COUNTER(&htim_spindle) ||
+		     lastPosition != motion.MotorPosition())
+		{
+			redrawDisplay = true;
+			lastEncoderPosition = __HAL_TIM_GET_COUNTER(&htim_spindle);
+		}
+		
+	}
+
+}	
+	
 uint32_t RotaryController::DoKeyScanEtc()
 {
-//	static uint32_t next_tick = 0;
-//	if (HAL_GetTick() >= next_tick)
-//	{
-//		HAL_GPIO_TogglePin(GPIO_LED_ONBOARD_GPIO_Port, GPIO_LED_ONBOARD_Pin);
-//		next_tick = HAL_GetTick() + 500;
-//			
-//		static int n = 0;
-//		n++;
-//		SetBacklight((EBacklight)(n % 3));
-//		//buzzer.Buzz(15);
-//		static bool on = false;
-//		SetRunButton(on);
-//		on = !on;
-//	}
+	//	static uint32_t next_tick = 0;
+	//	if (HAL_GetTick() >= next_tick)
+	//	{
+	//		HAL_GPIO_TogglePin(GPIO_LED_ONBOARD_GPIO_Port, GPIO_LED_ONBOARD_Pin);
+	//		next_tick = HAL_GetTick() + 500;
+	//			
+	//		static int n = 0;
+	//		n++;
+	//		SetBacklight((EBacklight)(n % 3));
+	//		//buzzer.Buzz(15);
+	//		static bool on = false;
+	//		SetRunButton(on);
+	//		on = !on;
+	//	}
 
+	if(motion.Update())
+		redrawDisplay = true;
+	
 	if ( motion.EncoderError())
 		SetBacklight(EBacklight::Red);
 		
@@ -1469,6 +1551,7 @@ void RotaryController::SetParameters( void )
 void RotaryController::Run()
 {
 	Mode mode = emSplash;
+	motion.SetMotorEnable(false);
 	
 	SetBacklight(EBacklight::Green);
 	while (true)
@@ -1480,11 +1563,10 @@ void RotaryController::Run()
 		{
 			case emSplash:
 				DoSplash();
-				mode = emSetup;
-				break;
-			case emSetup:
-				DoSetup();
-				mode = emJog;
+				if ( eepromHasBeenReset )
+					mode = emSetup;
+				else
+					mode = emJog;
 				break;
 			case emJog:
 				DoJog();
@@ -1504,7 +1586,16 @@ void RotaryController::Run()
 				break;
 			case emSynchronised:
 				DoSynchronised();
+				mode = emRecovery;
+				break;
+			case emRecovery:
+				if ( motion.EncoderError() )
+					DoRecovery();
 				mode = emSetup;
+				break;
+			case emSetup:
+				DoSetup();
+				mode = emJog;
 				break;
 		}
 //		if (tick != last_tick)
@@ -1615,5 +1706,9 @@ Device specific config
 
 TODO -
 - Many functions can be executed when the stepper is running.
-
+- How to handle missed steps?
+	- Extra "recovery" menu.
+		- Clear
+		- Recover - use step/encoder difference to move to correct spot.
+		- 
 */

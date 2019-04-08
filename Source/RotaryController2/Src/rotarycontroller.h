@@ -40,6 +40,7 @@ class RotaryController
 	int32_t division, divisions;
 	bool isSlowSpeed;
 	int32_t continuousSpeed;
+	bool redrawDisplay;
 	
 public:
 	enum EBacklight
@@ -67,6 +68,7 @@ public:
 	void DoContinuous();
 	void DoSynchronised();
 	void DoSegment();
+	void DoRecovery();
 		
 	bool DrawSegment(uint32_t sequence, uint32_t sequences, uint32_t sequenceRepeats, bool block);
 	bool DrawSynchronised(bool block);
@@ -74,6 +76,7 @@ public:
 	bool DrawDivisions(bool block);
 	bool DrawContinous(bool block);
 	void ShowRotateSpeed();
+	bool DrawDoRecovery(bool block);
 		
 	bool DrawJog(bool block=true);
 	void Jog(int32_t distance);

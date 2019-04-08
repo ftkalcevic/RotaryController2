@@ -93,7 +93,8 @@ static void MX_TIM1_Init(void);
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
-
+int x;
+int sign;
 /**
   * @brief  The application entry point.
   * @retval int
@@ -132,7 +133,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   DWT_Delay_Init();
   /* USER CODE END 2 */
-
+	
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   RotaryController rc;
@@ -500,10 +501,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIO_RUNBUTTON_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : GPIO_BUZZER_Pin GPIO_BACKLIGHT_IN2_Pin GPIO_BACKLIGHT_IN1_Pin GPIO_STEPPER_ENABLE_Pin 
-                           GPIO_STEPPER_DIR_Pin */
-  GPIO_InitStruct.Pin = GPIO_BUZZER_Pin|GPIO_BACKLIGHT_IN2_Pin|GPIO_BACKLIGHT_IN1_Pin|GPIO_STEPPER_ENABLE_Pin 
-                          |GPIO_STEPPER_DIR_Pin;
+  /*Configure GPIO pins : GPIO_BUZZER_Pin GPIO_BACKLIGHT_IN2_Pin GPIO_BACKLIGHT_IN1_Pin */
+  GPIO_InitStruct.Pin = GPIO_BUZZER_Pin|GPIO_BACKLIGHT_IN2_Pin|GPIO_BACKLIGHT_IN1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -517,8 +516,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : GPIO_EEPROM_CS_Pin GPIO_STEPPER_STEP_Pin */
-  GPIO_InitStruct.Pin = GPIO_EEPROM_CS_Pin|GPIO_STEPPER_STEP_Pin;
+  /*Configure GPIO pins : GPIO_EEPROM_CS_Pin GPIO_STEPPER_ENABLE_Pin GPIO_STEPPER_STEP_Pin GPIO_STEPPER_DIR_Pin */
+  GPIO_InitStruct.Pin = GPIO_EEPROM_CS_Pin|GPIO_STEPPER_ENABLE_Pin|GPIO_STEPPER_STEP_Pin|GPIO_STEPPER_DIR_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
